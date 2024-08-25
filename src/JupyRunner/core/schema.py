@@ -1,9 +1,14 @@
-import enum, json
+import enum, json, datetime
+import hashlib
+import os
+import re
 
-from typing import Optional
+
+from typing import Optional, List
 from sqlmodel import Field, SQLModel, Relationship, Enum, String, Column, JSON
 
 from JupyRunner.core import helpers
+import JupyRunner.core.filesys_storage_api as filesys
 
 STATUS_DICT = {
     "INITIALIZING": 0,
@@ -33,109 +38,224 @@ STATUS_MEAS_DICT = {
 }
 
 
-class STATUS(enum.IntEnum):
+class STATUS(enum.StrEnum):
     """
     Status codes for the observations status
     """
     
-    INITIALIZING = 0
-    AWAITING_CHECK = 1
-    WAITING_TO_RUN = 2
-    HOLD = 3, 
+    INITIALIZING = "INITIALIZING"
+    AWAITING_CHECK = "AWAITING_CHECK"
+    WAITING_TO_RUN = "WAITING_TO_RUN"
+    HOLD = "HOLD", 
     
-    STARTING = 10
-    RUNNING = 11
-    CANCELLING = 12
-    FINISHING = 13
+    STARTING = "STARTING"
+    RUNNING = "RUNNING"
+    CANCELLING = "CANCELLING"
+    FINISHING = "FINISHING"
 
-    FINISHED = 101
-    ABORTED = 102
+    FINISHED = "FINISHED"
+    ABORTED = "ABORTED"
 
-    CANCELLED = 1001
-    FAILED = 1000
-    FAULTY = 1002
+    CANCELLED = "CANCELLED"
+    FAILED = "FAILED"
+    FAULTY = "FAULTY"
 
-status_dc = {str(s.name): s.value for s in STATUS}
+status_dc = {str(s.name): STATUS_DICT[s.name] for s in STATUS}
+
+def json_serial(obj):
+    """JSON serializer for objects not serializable by default json code"""
+
+    if isinstance(obj, (datetime.datetime, datetime.date)):
+        return helpers.make_zulustr(obj, remove_ms=False)
+    elif isinstance(obj, (enum.IntEnum, enum.StrEnum, STATUS, STATUS_DATAFILE, DATAFILE_TYPE)):
+        return obj.name
 
 
-class STATUS_DATAFILE(enum.IntEnum):
+    raise TypeError ("Type %s not serializable" % type(obj))
+
+
+
+class STATUS_DATAFILE(enum.StrEnum):
     """
     Status codes for the observations status
     """
-    INITIALIZED = 0
-    AWAITING_MANUAL_UPLOAD = 2
+    INITIALIZED = "INITIALIZED"
+    AWAITING_MANUAL_UPLOAD = "AWAITING_MANUAL_UPLOAD"
     
-    READY = 100
-    FAULTY = 1002
+    READY = "READY"
+    FAULTY = "FAULTY"
     
-    ERROR = 1003
-    EMPTY = 2000
+    ERROR = "ERROR"
+    EMPTY = "EMPTY"
 
 class DATAFILE_TYPE(enum.StrEnum):
     """
     Status codes for the datafile types "str", "dataframe", "binary"
     """
 
+    UNKNOWN = "unknown"
     TEXTFILE = "text"
     DATAFRAME = "dataframe"
     BINARY = "binary"
-    
+
 
 class Device(SQLModel, table=True):
-    id: str = Field(primary_key=True, unique=True)
-    address: str = Field(nullable=False)
-    connection_protocol: str = Field(nullable=False)
-    configuration: str = Field(nullable=True)
-    comments: str = Field(nullable=True)
-    params_json: Optional[dict] = Field(sa_column=Column(JSON))
+    id: str = Field(primary_key=True, unique=True, nullable=False)
+    address: str = Field(default='', nullable=False)
+    connection_protocol: str = Field(default='', nullable=False)
+    configuration: str = Field(default='', nullable=False)
+    comments: str = Field(default='', nullable=False)
     data_json: Optional[dict] = Field(sa_column=Column(JSON))
-    last_change_time_iso: str = Field(nullable=False, default='{}')
+    last_time_changed: datetime.datetime = Field(nullable=False, default_factory=helpers.get_utcnow)
+
+    scripts: list["Script"] = Relationship(back_populates="device")
+    datafiles: list["Datafile"] = Relationship(back_populates="device")
+
+def get_default_params():
+    return {'follow_up_script' : {'script_in_path': '', 'script_params_json': {}}}
 
 class Script(SQLModel, table=True):
+
+
     id: Optional[int] = Field(default=None, primary_key=True)
-    script_name: str = Field(max_length=255, nullable=False)
-    script_version: str = Field(max_length=255, nullable=False)
-    script_in_path: str = Field(max_length=255, nullable=False)
-    script_out_path: str = Field(max_length=255, nullable=False)
+    script_name: str = Field(default='', max_length=255, nullable=False)
+    script_version: str = Field(default='', max_length=255, nullable=False)
+    script_in_path: str = Field(default='', max_length=255, nullable=False)
+    script_out_path: str = Field(default='', max_length=255, nullable=False)
 
-    device_id: str = Field(max_length=255, nullable=False, foreign_key="device.id")
-    script_params_json: Optional[dict] = Field(sa_column=Column(JSON))
+    default_data_dir: str = Field(default='', max_length=255, nullable=False)
 
-    start_condition: str = Field(nullable=True)
-    end_condition: str = Field(nullable=True)
+    device_id:  str|None = Field(default=None, max_length=255, nullable=True, foreign_key="device.id")
+    script_params_json: Optional[dict] = Field(sa_column=Column(JSON), default_factory=get_default_params)
 
-    time_initiated_iso: str = Field(nullable=False)
-    time_started_iso: Optional[str] = Field(nullable=True)
-    time_finished_iso: Optional[str] = Field(nullable=True)
+    start_condition: datetime.datetime = Field(nullable=False, default_factory=helpers.get_utcnow)
+    end_condition: datetime.datetime = Field(nullable=False, default_factory=lambda : helpers.get_utcnow() + datetime.timedelta(hours=24))
+
+    time_initiated: datetime.datetime = Field(nullable=False, default_factory=helpers.get_utcnow)
+    time_started: Optional[datetime.datetime] = Field(nullable=True, default_factory=helpers.get_utcnow)
+    time_finished: Optional[datetime.datetime] = Field(nullable=False, default_factory=helpers.get_utcnow)
 
     status: STATUS = Field(default=STATUS.INITIALIZING)
-    errors: str = Field(nullable=True)
-    comments: str = Field(nullable=True)
+    errors: str = Field(default='', nullable=False)
+    comments: str = Field(default='', nullable=False)
 
-    forecasted_oc: str = Field(nullable=True)
     papermill_json: Optional[dict] = Field(sa_column=Column(JSON))
+    data_json: Optional[dict] = Field(sa_column=Column(JSON), default_factory=lambda: {})
 
-    data_json: Optional[dict] = Field(sa_column=Column(JSON))
+    last_time_changed: datetime.datetime = Field(nullable=False, default_factory=helpers.get_utcnow)
 
-    last_change_time_iso: str = Field(nullable=False, default='{}')
-
-    # Relationship with the Device table (assuming you have a Device class defined)
     device: Device | None = Relationship(back_populates="scripts")
+    datafiles: list["Datafile"] = Relationship(back_populates="script")
+
+    @staticmethod
+    def construct(script_in_path, 
+                  script_params_json:str|None=None, 
+                  start_condition:datetime.datetime|None=None, 
+                  end_condition:datetime.datetime|None=None,
+                  device_id: str|None = None):
+
+        assert script_in_path, 'need to give "script_in_path"!'
+
+        script_name  = os.path.basename(script_in_path.split('.')[0])
+
+        filename = os.path.basename(script_in_path)
+        script_name, extension = os.path.splitext(filename)
+
+        if start_condition is None:
+            start_condition = helpers.get_utcnow()
+        if end_condition is None:
+            end_condition = start_condition + datetime.timedelta(hours=24)
+        
+        assert end_condition >= start_condition, f'end condition must be bigger than start condition {start_condition=} {end_condition=}'
+
+        return Script(
+            script_in_path=script_in_path,
+            script_name = script_name,
+            script_params_json=script_params_json,
+            start_condition=start_condition,
+            end_condition=end_condition,
+            device_id = device_id
+        )
+    
+    def get_data_dir(self):
+        if self.default_data_dir:
+            return self.default_data_dir
+        else:
+            return os.path.join(self.get_script_dir(), 'data')
+    
+    
+    def get_script_dir(self):
+        assert self.script_out_path, 'no "script_out_path" given yet to get a script folder from!'
+        return os.path.dirname(self.script_out_path)
+    
+    def set_script_version(self, force_overwrite=False):
+        if self.script_version and not force_overwrite:
+            return self.script_version
+        
+        tlast_change = os.path.getmtime(self.script_in_path)
+        dtlast_change = helpers.make_zulustr(datetime.datetime.fromtimestamp(tlast_change))
+        with open(self.script_in_path,'rb') as f:
+            self.script_version = hashlib.md5(f.read()).hexdigest() + '_' + dtlast_change
+        return self.script_version
+    
+
+    def set_script_out_path(self, force_overwrite=False):
+
+        if self.script_out_path and not force_overwrite:
+            return self.script_out_path
+        
+        assert self.id is not None, 'the script is not commited to the database yet, can not set the script out path!'
+        assert self.time_started, 'can not set out_path, because the script has no "time_started" yet!'
+
+        filename = os.path.basename(self.script_in_path)
+        name, extension = os.path.splitext(filename)
+
+        if name.startswith('script_'): name = name[len('script_'):]
+        if name.startswith('exp_'): name = name[len('exp_'):]
+        if name.startswith('experiment_'): name = name[len('experiment_'):]
+        if name.startswith('test_'): name = name[len('test_'):]
+        if name.startswith('ana_'): name = name[len('ana_'):]
+        if name.startswith('analysis_'): name = name[len('analysis_'):]
+        if name.startswith('base_'): name = name[len('base_'):]
+
+        device_id = self.device_id if self.device_id else 'no_device'
+        script_id = self.id
+        pth_out = filesys.get_script_save_filepath(self.time_started, script_id, device_id, name, make_dir=False)
+
+        if not filesys.is_pathname_valid(pth_out):
+            # handle windows style volume descriptors starting with C: or similar
+            if re.match(r"(^[A-Za-z]:).+", pth_out):
+                pth_out = pth_out[:2] + re.sub(r'[\n\\\*>:<?\"|\t]', '', pth_out[2:])
+            else:
+                pth_out = re.sub(r'[\n\\\*>:<?\"|\t]', '', pth_out)
+        
+        if not filesys.is_pathname_valid(pth_out):
+            raise Exception('The out script file path is invalid. GOT: "' + pth_out + '"')
+
+        pth_out = pth_out.strip()
+        self.script_out_path = pth_out
+        return self.script_out_path
+    
+    def append_error_msg(self, err):
+        self.errors += '\n' + str(err)
 
 
-class DataFile(SQLModel, table=True):
+class Datafile(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     script_id: int = Field(nullable=False, foreign_key="script.id")
     device_id: str = Field(max_length=255, nullable=False, foreign_key="device.id")
-    tags: str = Field(nullable=True)
+    tags: List[str] = Field(sa_column=Column(JSON), default_factory=lambda: [])
     meas_name: str = Field(max_length=255, nullable=False)
     status: STATUS_DATAFILE = Field(nullable=False)  # Consider using an enum for status
-    errors: str = Field(nullable=True)
-    data_type: DATAFILE_TYPE = Field(nullable=False)
-    source: str = Field(nullable=True)
-    data_json: Optional[dict] = Field(sa_column=Column(JSON))
-    comments: str = Field(nullable=True)
-    last_change_time_iso: str = Field(nullable=False)
+    errors: str = Field(default='', nullable=False)
+    data_type: DATAFILE_TYPE = Field(default=DATAFILE_TYPE.UNKNOWN, nullable=False)
+    mime_type: str = Field(default='', nullable=False)
+
+    source: str = Field(nullable=False)
+    data_json: Optional[dict] = Field(sa_column=Column(JSON), default_factory=lambda: {})
+    comments: str = Field(default='', nullable=False)
+    time_initiated: datetime.datetime = Field(nullable=False, default_factory=helpers.get_utcnow)
+    last_time_changed: datetime.datetime = Field(nullable=False, default_factory=helpers.get_utcnow)
 
     # Relationships with the Script and Device tables
     script: Script | None = Relationship(back_populates="datafiles")
@@ -145,8 +265,14 @@ class DataFile(SQLModel, table=True):
 
 class ProjectVariable(SQLModel, table=True):
     id: str = Field(primary_key=True, unique=True)
-    value_json: Optional[dict] = Field(sa_column=Column(JSON))
-    data_json: Optional[dict] = Field(sa_column=Column(JSON))
-    last_change_time_iso: str = Field(nullable=False)
+    data_json: Optional[dict] = Field(sa_column=Column(JSON), default_factory=lambda: {})
+    data_json: Optional[dict] = Field(sa_column=Column(JSON), default_factory=lambda: {})
+
+    time_initiated: datetime.datetime = Field(nullable=False, default_factory=helpers.get_utcnow)
+    last_time_changed: datetime.datetime = Field(nullable=False, default_factory=helpers.get_utcnow)
 
     
+
+schema_dc = {cls.__name__: cls.__tablename__ for cls in [Script, Datafile, ProjectVariable, Device, Device]}
+schema_cls_dc = {cls: cls.__tablename__ for cls in [Script, Datafile, ProjectVariable, Device, Device]}
+schema_cls_dc_inv = {v:k for k, v in schema_cls_dc.items()}

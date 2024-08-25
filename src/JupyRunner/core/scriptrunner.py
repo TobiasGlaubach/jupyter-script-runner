@@ -1,15 +1,19 @@
 import datetime
 import hashlib
+import json
 import papermill
 import nbconvert
 import os
 
-from JupyRunner.core import schema, db_interface
+from JupyRunner.core import schema, api_interface
 from JupyRunner.core.schema import Script, STATUS
 from JupyRunner.core.helpers import log, get_utcnow, make_zulustr, now_iso
 from JupyRunner.core.helpers_mattermost import send_mattermost
 
 import traceback
+
+config = None
+url = None
 
 def send_mattermost_failed(script:Script, err: Exception):
     s = ''
@@ -21,17 +25,35 @@ def send_mattermost_failed(script:Script, err: Exception):
 def send_mattermost_status(script:Script):
     send_mattermost(f'{script.id=} {script.status=}')
 
+def setup(cnfg):
+    global config, api
+    config = cnfg
+    url = config['globals']['url']
+    api = api_interface.ScriptClient(url)
 
-def pre_test(script:Script):
-    Script(**script.model_dump())
+
+def load(cnfg):
+    global config
+    config = cnfg
+
+
+def get(script_id) -> schema.Script:
+    return api.get(script_id)
+
+def commit(script:schema.Script) -> schema.Script:
+    return api.put(script)
+
+def set_prop_remote(script_id, **kwargs) -> schema.Script:
+    if hasattr(script_id, 'id'):
+        script_id = script_id.id
+    return api.patch(script_id, **kwargs)
 
 def _pre(script:Script, is_test=False):
     if not is_test:
         # Set script status to STARTING
         log.info("Script %d: Starting", script.id)
-    script.status = STATUS.STARTING
     if not is_test:
-        script = db_interface.commit(script)
+        script = set_prop_remote(script, status = STATUS.STARTING)
 
     if not is_test:
         log.info("Script %d: setting default fields", script.id)
@@ -39,7 +61,7 @@ def _pre(script:Script, is_test=False):
     script.set_script_version()
     script.set_script_out_path()
     if not is_test:
-        script = db_interface.commit(script)
+        script = commit(script)
 
     if not is_test:
         # Convert script to dictionary
@@ -59,78 +81,54 @@ def _pre(script:Script, is_test=False):
         params_json['follow_up_script'] = {'script_in_path': '', 'script_params_json': {}}
     
     all_params.update(params_json)
+
+    # sanitize
+    all_params = json.loads(json.dumps(all_params, default=schema.json_serial))
+
     if not is_test:
         log.info("Script %d: Extracted and merged parameters", script.id)
 
     # Set script status to RUNNING
     if not is_test:
         log.info("Script %d: Running", script.id)
-    script.status = STATUS.RUNNING
     if not is_test:
-        script = db_interface.commit(script)
+        script = set_prop_remote(script, status = STATUS.RUNNING)
 
+    return script, all_params
+
+def pre_check(script:Script):
+    _pre(None, Script(**script.model_dump()), is_test=True)
     return script
 
-def run_script(script: Script):
+def run_script(script_id:int):
     """
     Runs a Jupyter script using Papermill and converts the output to HTML.
 
     Args:
-        script: The Script object.
+        script: The Script id.
 
     Returns:
         The path to the generated HTML file, or None on error.
     """
 
     try:
-        # Set script status to STARTING
-        log.info("Script %d: Starting", script.id)
-        script.status = STATUS.STARTING
-        script = db_interface.commit(script)
-
-        log.info("Script %d: setting default fields", script.id)
-        script.time_started = get_utcnow()
-        script.set_script_version()
-        script.set_script_out_path()
-        script = db_interface.commit(script)
-
-
-        # Convert script to dictionary
-        log.info("Script %d: Converting to dictionary", script.id)
-        all_params = script.model_dump()
-
-        # Create output directory if it doesn't exist
-        output_dir = os.path.dirname(script.script_out_path)
-        os.makedirs(output_dir, exist_ok=True)
-        log.info("Script %d: Created output directory if needed: %s", script.id, output_dir)
-
-        # Extract and merge parameters
-        all_params['script_id'] = all_params.pop("id")
-        params_json = all_params.pop("script_params_json")
-        if not 'follow_up_script' in params_json:
-            params_json['follow_up_script'] = {'script_in_path': '', 'script_params_json': {}}
+        script = get(script_id)
         
-        all_params.update(params_json)
-        log.info("Script %d: Extracted and merged parameters", script.id)
-
-        # Set script status to RUNNING
-        log.info("Script %d: Running", script.id)
-        script.status = STATUS.RUNNING
-        script = db_interface.commit(script)
-
+        script, all_params = _pre(script, is_test=False)
+        
         send_mattermost(f'Script {script.id}: RUNNING with:  {script.script_in_path} (VER:{script.script_version}) -> {script.script_out_path}')
         # Run the script using Papermill
         nb = papermill.execute_notebook(
             script.script_in_path,
             script.script_out_path,
-            parameters=all_params
+            parameters=all_params,
+            kernel_name="python3"
         )
 
         log.info(f"Script {script.id}: Finished running with Papermill", script.id)
 
         # Set script status to FINISHING
-        script.status = STATUS.FINISHING
-        script = db_interface.commit(script)
+        script = set_prop_remote(script, status = STATUS.FINISHING)
         log.info("Script %d: Finishing on", script.id)
 
         # Convert the output notebook to HTML
@@ -156,17 +154,19 @@ def run_script(script: Script):
             # Set script status to FINISHING
             script.status = STATUS.FINISHED
             script.script_out_path = script.script_out_path.replace(".ipynb", ".html")
-            
-            script = db_interface.commit(script)
             s = f"Script {script.id}: Finished successfully on {make_zulustr(script.time_finished)}"
             log.info(s)
             send_mattermost(s)
+
+        script = commit(script)
+
         return script.script_out_path
 
     except Exception as e:
+        raise
         log.error("Script %d: Error running script: %s", script.id, str(e))
         script.status = STATUS.ERROR
-        script.error = traceback.format_exc()  # Store traceback info
-        script = db_interface.commit(script)
+        script.append_error_msg(traceback.format_exc())  # Store traceback info
+        commit(script)
         send_mattermost_failed(script, e)
         return None  # Indicate error

@@ -1,0 +1,45 @@
+version: '2.0'
+
+services:
+  jupyrun_db:
+    image: jupyrun_db:latest 
+
+    restart: unless-stopped
+
+    environment:
+      DUMMY: 1
+
+    build:
+      context: .
+      dockerfile: deploy/main/Dockerfile
+
+    volumes:
+      # - /var/meertest/meertest_db:/home/jovyan/db:rw
+      # - /var/meertest/meertest_shared:/home/jovyan/shared:rw
+      - "C:/Users/tglaubach/Nextcloud/davmount/skampieng_db/meertest_db:/home/jovyan/db:r"
+      - "C:/Users/tglaubach/Nextcloud/davmount/skampieng_db/meertest_shared:/home/jovyan/shared:r"
+
+    ports:
+      - "7990:8080"
+
+    command: fastapi run main.py --port 8080
+    
+  jupyrun_proc:
+    restart: unless-stopped
+    build:
+      context: .
+      dockerfile: deploy/procserver/Dockerfile
+    image: "jupyrun_proc:latest"
+    volumes:
+      # - /var/meertest/meertest_db:/home/jovyan/db:rw
+      # - /var/meertest/meertest_shared:/home/jovyan/shared:rw    
+      - "C:/Users/tglaubach/Nextcloud/davmount/skampieng_db/meertest_db:/home/jovyan/db:r"
+      - "C:/Users/tglaubach/Nextcloud/davmount/skampieng_db/meertest_shared:/home/jovyan/shared:r"
+    environment:
+      HOME: /home/jovyan
+      JUPYTER_TOKEN: "jupyrun"
+      SHARED: /home/jovyan/shared
+    command: "python3 procserver.py"
+    depends_on:
+      - jupyrun_db
+  
