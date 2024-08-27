@@ -244,6 +244,8 @@ class Datafile(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     script_id: int = Field(nullable=False, foreign_key="script.id")
     device_id: str = Field(max_length=255, nullable=False, foreign_key="device.id")
+    filename: str = Field(max_length=255, nullable=False, default_factory="")
+
     tags: List[str] = Field(sa_column=Column(JSON), default_factory=lambda: [])
     meas_name: str = Field(max_length=255, nullable=False)
     status: STATUS_DATAFILE = Field(nullable=False)  # Consider using an enum for status
