@@ -1,2 +1,18 @@
 db:
-  filepath: "scriptrunner.db"
+  filepath: '/home/jovyan/db/jupyrun_data.db'
+
+globals:
+  dbserver_uri: 'http://localhost:8000'
+  mattermost_uri: ''
+
+
+pathes:
+  default_dir_meas: '/home/jovyan/shared/meas/'
+  default_dir_repo: '/home/jovyan/shared/repos/'
+
+procserver:
+  do_direct_running: 0
+  terminate_timeout_sec: 5
+  t_interval: 5
+  run_script_path: run_script
+  pythonpath_for_win: 'python'
