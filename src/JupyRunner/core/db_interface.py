@@ -1,6 +1,6 @@
 
 
-import datetime
+import datetime, json
 from sqlmodel import Session, create_engine, SQLModel, select
 from JupyRunner.core import schema, helpers
 
@@ -10,17 +10,35 @@ engine = None
 sqlite_file_name = None
 
 
+
+def json_serializer(obj):
+    return json.dumps(obj, ensure_ascii=False, default=schema.json_serial)
+
+def json_deserializer(obj):
+    return _json_deserializer(json.loads(obj))
+
+def _json_deserializer(dc):
+    if isinstance(dc, dict):
+        return {k:_json_deserializer(d) for k, d in dc.items()}
+    elif isinstance(dc, list):
+        return [_json_deserializer(d) for d in dc]
+    elif isinstance(dc, str) and dc.endswith('Z') and helpers.match_zulutime(dc):
+        return helpers.parse_zulutime(dc)
+    else:
+        return dc
+
 def setup(config):
     global engine, sqlite_url, sqlite_file_name
     sqlite_file_name = config.get('db', {})['filepath']
     sqlite_url = f"sqlite:///{sqlite_file_name}"
     connect_args = {"check_same_thread": False}
-    engine = create_engine(sqlite_url, echo=True, connect_args=connect_args)
+    engine = create_engine(sqlite_url, echo=True, connect_args=connect_args, json_serializer=json_serializer, json_deserializer=json_deserializer)
 
 def start(config):
     helpers.log.info(f"creating all tables for {sqlite_file_name=}")
-    print(f"creating all tables for {sqlite_file_name=}")
     SQLModel.metadata.create_all(engine)
+    commit(schema.ProjectVariable(id='dbi_info', data_json={'t_last': helpers.get_utcnow(), 'info': helpers.get_sys_info()}))
+    
 
 def get_engine():
     global engine
@@ -48,9 +66,16 @@ def set_property(data_type:type, obj_id, **kwargs):
 
 def commit(obj):
     with Session(engine) as session:
-        return add_to_db(session, obj)
-    
-
+        existing_model = session.get(type(obj), obj.id)
+        
+        if existing_model:
+            # Update existing model
+            for attr, value in obj.model_dump().items():
+                setattr(existing_model, attr, value)
+        else:
+            # Add new model
+            return add_to_db(session, obj)
+            
 def add_many(objs):
     with Session(engine) as session:
         for obj in objs:
