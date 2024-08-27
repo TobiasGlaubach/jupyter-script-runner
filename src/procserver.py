@@ -4,6 +4,7 @@
 the processing core to run jupyter notebooks in papermill
 """
 
+import datetime
 import subprocess
 
 import sys, os
@@ -18,7 +19,9 @@ if __name__ == '__main__':
     parent_dir = os.path.dirname(os.path.dirname(current_dir))
     sys.path.insert(0, parent_dir)
 
-from JupyRunner.core import schema, db_interface, scriptscript
+from JupyRunner.core import schema
+from JupyRunner.core import scriptrunner as runner
+
 from JupyRunner.core.helpers import get_utcnow, make_zulustr, parse_zulutime, log
 from JupyRunner.core.helpers_mattermost import send_mattermost
 
@@ -31,16 +34,25 @@ processes = {}
 with open('config.yaml', 'r') as fp:
     config = yaml.safe_load(fp)
 
-assert os.path.exists(config.get('db', {})['filepath']), 'the database for the procserver does not exist!'
-db_interface.setup(config)
+modules = [runner]
+for module in modules:
+    module.setup(config)
+
+for module in modules:
+    module.start(config)
+
+
+api = runner.api
+
+commit = runner.commit
+
 
 def get_script(script_id:int) -> schema.Script:
     if isinstance(script_id, str):
         script_id = int(script_id)
-    return db_interface.get(schema.Script, script_id)
-    
-def commit(script):
-    db_interface.commit(script)
+    return api.get(schema.Script, script_id)
+
+
 
 
 def get_running_processes():
@@ -100,6 +112,7 @@ def start_job(id):
         p = subprocess.Popen(cmds, stdout=subprocess.PIPE, stderr=subprocess.PIPE, creationflags=subprocess.CREATE_NEW_CONSOLE)
     else:
         p = subprocess.Popen(cmds, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        
     processes[id] = p
 
 def cancle_job(id):
@@ -126,58 +139,51 @@ def cancle_job(id):
 def tick_awaiting_check():
     # initial checks
     stati = [schema.STATUS.AWAITING_CHECK]
-    with db_interface.Session(db_interface.engine) as session:
-        query = db_interface.select(schema.Script).where(schema.Script.status.in_(stati))
-        scripts = session.exec(query).all()
+    scripts = api.qry(stati=stati)
 
-        for script in scripts:
-            try:
-                log.info('CHECKING for ' + str(script))
-                log.debug(f'   FROM: {script.script_in_path}')
-                log.debug(f'     TO: {script.script_out_path}')
-                
-                log.debug('checking...')
-                script.check()
-                scriptscript.pre_test(script)
-                stat = schema.STATUS.WAITING_TO_RUN
-            except Exception as err:
-                script.append_err_msg(str(err))
-                log.debug('ERROR: ' + str(err))
-                stat = schema.STATUS.FAULTY
+    for script in scripts:
+        try:
+            log.info('CHECKING for ' + str(script))
+            log.debug(f'   FROM: {script.script_in_path}')
+            log.debug(f'     TO: {script.script_out_path}')
             
-            log.debug('setting status... ' + stat)
-            script.status = stat
-            session.add(script)
+            log.debug('checking...')
+            script.check()
+            script.pre_test(script)
+            stat = schema.STATUS.WAITING_TO_RUN
+        except Exception as err:
+            script.append_err_msg(str(err))
+            log.debug('ERROR: ' + str(err))
+            stat = schema.STATUS.FAULTY
+        
+        log.debug('setting status... ' + stat)
+        script.status = stat
 
-            log.info('DONE CHECKING with ' + str(script))
+        log.info('DONE CHECKING with ' + str(script))
 
-        session.commit()
-    
+        commit(script)
+        
 
 def tick_cancelling():
     # initial checks
     stati = [schema.STATUS.CANCELLING]
-    with db_interface.Session(db_interface.engine) as session:
-        query = db_interface.select(schema.Script).where(schema.Script.status.in_(stati))
-        scripts = session.exec(query).all()
+    scripts = api.qry(stati=stati)
 
-        for script in scripts:
-            try:
-                if test_is_running(script.id):
-                    cancle_job(script.id)
-            except Exception as err:
-                script.append_err_msg(str(err))
-                log.debug('ERROR: ' + str(err))
-                stat = schema.STATUS.FAULTY
-            
-            log.debug('setting status... ' + stat)
-            script.status = stat
-            session.add(script)
+    for script in scripts:
+        try:
+            if test_is_running(script.id):
+                cancle_job(script.id)
+        except Exception as err:
+            script.append_err_msg(str(err))
+            log.debug('ERROR: ' + str(err))
+            stat = schema.STATUS.FAULTY
+        
+        log.debug('setting status... ' + stat)
+        script.status = stat
+        commit(script)
 
-            log.info('DONE CHECKING with ' + str(script))
-            
-        session.commit()
-
+        log.info('DONE CHECKING with ' + str(script))
+        
 
 
 def tick_cleanup():
@@ -209,34 +215,30 @@ def tick_start():
 
     stati = [schema.STATUS.STARTING, schema.STATUS.WAITING_TO_RUN]
 
-    with db_interface.Session(db_interface.engine) as session:
-        query = db_interface.select(schema.Script).where(schema.Script.status.in_(stati))
-        scripts = session.exec(query).all()
+    scripts = api.qry(stati=stati)
 
-        for script in scripts:
-            try:
-                
-                key = script.id
-                if not test_is_running(key) and script.test_for_start_condition():
-                    log.info('STARTING PROCESSING for ' + str(script))
-                    start_job(script.id)
-                    log.info('DONE STARTING with ' + str(script))
-                else:
-                    log.debug('test_is_running:          ' + str(test_is_running(key)))
-                    log.debug('test_for_start_condition: ' + str(script.test_for_start_condition()))
+    for script in scripts:
+        try:
+            key = script.id
+            if not test_is_running(key) and script.test_for_start_condition():
+                log.info('STARTING PROCESSING for ' + str(script))
+                start_job(script.id)
+                log.info('DONE STARTING with ' + str(script))
+            else:
+                log.debug('test_is_running:          ' + str(test_is_running(key)))
+                log.debug('test_for_start_condition: ' + str(script.test_for_start_condition()))
 
-            except Exception as err:
-                script.append_err_msg(str(err))
-                log.debug('ERROR: ' + str(err))
-                stat = schema.STATUS.FAULTY
-            
-            log.debug('setting status... ' + stat)
-            script.status = stat
-            session.add(script)
+        except Exception as err:
+            script.append_err_msg(str(err))
+            log.debug('ERROR: ' + str(err))
+            stat = schema.STATUS.FAULTY
+        
+        log.debug('setting status... ' + stat)
+        script.status = stat
+        commit(script)
 
-            log.info('DONE CHECKING with ' + str(script))
+        log.info('DONE CHECKING with ' + str(script))
 
-        session.commit()
     
 
 def tick():
@@ -246,12 +248,20 @@ def tick():
     tick_cleanup()
     tick_start()
 
-def update_ticker():
-    procserver_tlast = db_interface.get(schema.ProjectVariable, 'procserver_tlast')
-    if procserver_tlast is None:
-        procserver_tlast = schema.ProjectVariable(id='procserver_tlast', data_json={'time': ''})
-    procserver_tlast.data_json['time'] = get_utcnow()
-    commit(procserver_tlast)
+def update_ticker(t_sleep):
+    procserver_info = runner.full_api.get(schema.ProjectVariable, 'procserver_info')
+    if procserver_info is None:
+        procserver_info = schema.ProjectVariable(id='procserver_info', data_json={'t_last': '', 't_expected_next': '', 'running_processes': []})
+    
+
+    t_last = get_utcnow()
+    procserver_info.data_json['t_last'] = t_last
+    procserver_info.data_json['t_expected_next'] = t_last + datetime.timedelta(t_sleep)
+    procserver_info.data_json['running_processes'] = [dict(script_id=k, pid=v.pid) for k, v in processes.items()]
+    
+
+    commit(procserver_info)
+
 
 def run():
     log.info('procserver starting up!')
@@ -262,7 +272,7 @@ def run():
         try:
             if i % 100 == 0:
                 log.info('procserver is still alive!')
-                update_ticker()
+                update_ticker(t_sleep)
 
             tick()
 
