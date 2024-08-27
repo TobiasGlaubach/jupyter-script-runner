@@ -1,5 +1,7 @@
 
 fastapi[standard]
+python-multipart
+
 sqlmodel
 sqlalchemy
 sqlite-utils
@@ -18,6 +20,7 @@ nbconvert==6.5.0
 pytest
 
 ipython
+psutil
 
 # numpy
 # pandas
