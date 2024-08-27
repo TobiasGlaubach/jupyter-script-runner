@@ -1,6 +1,7 @@
 import datetime
 import hashlib
 import json
+import time
 import papermill
 import nbconvert
 import os
@@ -29,7 +30,7 @@ def send_mattermost_status(script:Script):
 def setup(cnfg):
     global config, api, full_api
     config = cnfg
-    url = config['globals']['url']
+    url = config['globals']['dbserver_uri']
     api = api_interface.ScriptClient(url)
     full_api = api_interface.APIClient(url)
 
@@ -49,16 +50,16 @@ def set_prop_remote(script_id, **kwargs) -> schema.Script:
         script_id = script_id.id
     return api.patch(script_id, **kwargs)
 
-def _pre(script:Script, is_test=False):
-    if not is_test:
-        # Set script status to STARTING
-        log.info("Script %d: Starting", script.id)
-    if not is_test:
-        script = set_prop_remote(script, status = STATUS.STARTING)
+def prepare_for_run(script:Script):
+    script, _ = _pre(script, is_test=False)
+    return script
 
+def _pre(script:Script, is_test=False):
+    
     if not is_test:
         log.info("Script %d: setting default fields", script.id)
-    script.time_started = get_utcnow()
+    
+    script.set_script_name()
     script.set_script_version()
     script.set_script_out_path()
     if not is_test:
@@ -85,21 +86,31 @@ def _pre(script:Script, is_test=False):
 
     # sanitize
     all_params = json.loads(json.dumps(all_params, default=schema.json_serial))
-
-    if not is_test:
-        log.info("Script %d: Extracted and merged parameters", script.id)
-
-    # Set script status to RUNNING
-    if not is_test:
-        log.info("Script %d: Running", script.id)
-    if not is_test:
-        script = set_prop_remote(script, status = STATUS.RUNNING)
+    log.info("Script %d: Extracted and merged parameters", script.id)
 
     return script, all_params
 
 def pre_check(script:Script):
-    _pre(None, Script(**script.model_dump()), is_test=True)
-    return script
+    dummy_script = Script(**script.model_dump())
+    dummy_script.id = time.time_ns()
+    dummy_script.comments += 'this is a dummy script automatically generated for testing'
+    _pre(dummy_script, is_test=True)
+    return dummy_script
+
+def init_follow_up_script(script):
+    
+    fus_dc = script.script_params_json.get('follow_up_script', {})
+    if fus_dc and fus_dc.get('script_in_path'):
+        log.info('Addinf follow up script after {script.id=}!')
+
+        if 'data_json' in fus_dc:
+            fus_dc['data_json'].update({'parent_script_id': script.id})
+        else:
+            fus_dc['data_json'] = {'parent_script_id': script.id}                        
+        fus = api.post(fus_dc)
+        return fus
+    
+    return None
 
 def run_script(script_id:int):
     """
@@ -115,8 +126,16 @@ def run_script(script_id:int):
     try:
         script = get(script_id)
 
+        log.info("Script %d: Starting", script.id)
+        
+
+        script = set_prop_remote(script, status = STATUS.STARTING)
+
         script, all_params = _pre(script, is_test=False)
         
+        log.info("Script %d: Running", script.id)
+        script = set_prop_remote(script, status = STATUS.RUNNING, time_started = get_utcnow())
+
         send_mattermost(f'Script {script.id}: RUNNING with:  {script.script_in_path} (VER:{script.script_version}) -> {script.script_out_path}')
         # Run the script using Papermill
         nb = papermill.execute_notebook(
@@ -136,7 +155,7 @@ def run_script(script_id:int):
         html_exporter = nbconvert.HTMLExporter()
         html_data, resources = html_exporter.from_filename(script.script_out_path)
         new_out = script.script_out_path.replace(".ipynb", ".html")
-        with open(new_out, "w") as f:
+        with open(new_out, "w", encoding='utf-8') as f:
             f.write(html_data)
         script.script_out_path = new_out
         script.time_finished = get_utcnow()
@@ -161,7 +180,7 @@ def run_script(script_id:int):
 
         script = commit(script)
 
-        return script.script_out_path
+        return script
 
     except Exception as e:
         raise

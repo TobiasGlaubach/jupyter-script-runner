@@ -27,7 +27,9 @@ def run(script_id):
         config = yaml.safe_load(fp)
 
     api_interface.setup(config)
-    scriptrunner.run_script(script_id)
+    script = scriptrunner.run_script(script_id)
+    scriptrunner.init_follow_up_script(script)
+
 
     tend = helpers.get_utcnow()
     td = tend - tstart

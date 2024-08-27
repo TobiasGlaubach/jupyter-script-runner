@@ -9,6 +9,7 @@ import subprocess
 
 import sys, os
 import time
+import traceback
 
 import yaml
 
@@ -28,6 +29,7 @@ from JupyRunner.core.helpers_mattermost import send_mattermost
 
 
 config =  None
+run_directly = None
 
 processes = {}
 
@@ -43,6 +45,7 @@ for module in modules:
 
 
 api = runner.api
+run_directly = config.get('procserver', {}).get('do_direct_running', 0)
 
 commit = runner.commit
 
@@ -79,8 +82,8 @@ def finish(p, id):
 
     obj = get_script(id)
     if retcode:
-        obj.append_err_msg(err)
-        log.debug('ERROR: ' + err)
+        obj.append_error_msg(err)
+        log.error('ERROR: ' + err)
         log.debug('setting status: FAILED...' )
         obj.status = schema.STATUS.FAILED
         commit(obj)
@@ -128,7 +131,7 @@ def cancle_job(id):
         err = err.decode(sys.stderr.encoding)
         
         obj = get_script(id)
-        obj.append_err_msg(err)
+        obj.append_error_msg(err)
         obj.status = schema.STATUS.CANCELLED
         commit(obj)
         
@@ -138,44 +141,54 @@ def cancle_job(id):
 
 def tick_awaiting_check():
     # initial checks
-    stati = [schema.STATUS.AWAITING_CHECK]
+    log.debug(f'tick_awaiting_check...')
+
+    stati = [schema.STATUS.INITIALIZING, schema.STATUS.AWAITING_CHECK]
     scripts = api.qry(stati=stati)
+    log.debug(f'got N={len(scripts)} scripts which need attention...')
 
     for script in scripts:
         try:
             log.info('CHECKING for ' + str(script))
-            log.debug(f'   FROM: {script.script_in_path}')
-            log.debug(f'     TO: {script.script_out_path}')
+
             
             log.debug('checking...')
-            script.check()
-            script.pre_test(script)
+            runner.pre_check(script)
+            
+            log.debug('actually setting...')
+            runner.prepare_for_run(script)
             stat = schema.STATUS.WAITING_TO_RUN
+            log.debug(f'   FROM: {script.script_in_path}')
+            log.debug(f'     TO: {script.script_out_path}')
+
         except Exception as err:
-            script.append_err_msg(str(err))
-            log.debug('ERROR: ' + str(err))
+            
+            script.append_error_msg(str(err))
+            log.error('ERROR: ' + str(err))
             stat = schema.STATUS.FAULTY
         
-        log.debug('setting status... ' + stat)
         script.status = stat
 
-        log.info('DONE CHECKING with ' + str(script))
+        log.info(f'DONE CHECKING with {script.id} --> {stat}')
 
         commit(script)
         
 
 def tick_cancelling():
+    log.debug(f'tick_cancelling...')
     # initial checks
     stati = [schema.STATUS.CANCELLING]
     scripts = api.qry(stati=stati)
+    log.debug(f'got N={len(scripts)} scripts which need attention...')
 
     for script in scripts:
         try:
             if test_is_running(script.id):
                 cancle_job(script.id)
+            stat = script.status
         except Exception as err:
-            script.append_err_msg(str(err))
-            log.debug('ERROR: ' + str(err))
+            script.append_error_msg(str(err))
+            log.error('ERROR: ' + str(err))
             stat = schema.STATUS.FAULTY
         
         log.debug('setting status... ' + stat)
@@ -187,6 +200,7 @@ def tick_cancelling():
 
 
 def tick_cleanup():
+    log.debug(f'tick_cleanup...')
     # clean up if finished
     to_remove = []
     for script_id, p in processes.items():
@@ -200,7 +214,7 @@ def tick_cleanup():
 
         except Exception as err:
             obj = get_script(script_id)
-            obj.append_err_msg(err_msg=str(err))
+            obj.append_error_msg(err_msg=str(err))
             log.exception(f'ERROR while cleaining up {key}, {p}')
             log.exception('ERROR: ' + str(err))
             obj.status=schema.STATUS.FAULTY
@@ -212,41 +226,55 @@ def tick_cleanup():
         
 
 def tick_start():
-
+    log.debug(f'tick_start...')
     stati = [schema.STATUS.STARTING, schema.STATUS.WAITING_TO_RUN]
-
+    stat = None
     scripts = api.qry(stati=stati)
-
+    log.debug(f'got N={len(scripts)} scripts which need attention...')
     for script in scripts:
         try:
             key = script.id
             if not test_is_running(key) and script.test_for_start_condition():
                 log.info('STARTING PROCESSING for ' + str(script))
-                start_job(script.id)
-                log.info('DONE STARTING with ' + str(script))
+                stat = schema.STATUS.STARTING
+                log.debug('setting status... ' + stat)
+                script.status = stat
+                commit(script)
+
+                if run_directly:
+                    runner.run_script(script.id)
+                    log.info('DONE RUNNING with ')
+                    runner.init_follow_up_script(script)
+                    
+                else:
+                    start_job(script.id)
+
+                    log.info('DONE STARTING with ' + str(script))
             else:
                 log.debug('test_is_running:          ' + str(test_is_running(key)))
                 log.debug('test_for_start_condition: ' + str(script.test_for_start_condition()))
-
+                stat = script.status
         except Exception as err:
-            script.append_err_msg(str(err))
-            log.debug('ERROR: ' + str(err))
-            stat = schema.STATUS.FAULTY
-        
-        log.debug('setting status... ' + stat)
-        script.status = stat
-        commit(script)
 
-        log.info('DONE CHECKING with ' + str(script))
+            traceback.print_exception(err)
+            script.append_error_msg(str(err))
+            log.error('ERROR: ' + str(err))
+            stat = schema.STATUS.FAULTY
+            log.error('setting status... ' + stat)
+            script.status = stat
+            commit(script)
+
+        log.debug('tick_start...DONE with script=' + str(script.id))
 
     
 
 def tick():
-    
+    log.debug(f'tick... ')
     tick_awaiting_check()
     tick_cancelling()
     tick_cleanup()
     tick_start()
+    log.debug(f'tick... DONE')
 
 def update_ticker(t_sleep):
     procserver_info = runner.full_api.get(schema.ProjectVariable, 'procserver_info')
@@ -282,4 +310,18 @@ def run():
         time.sleep(t_sleep)
 
 if __name__ == '__main__':
-    tick()
+    log.info('STARTING procserver!')
+
+    if sys.argv[-1].lower() == 'debug':
+
+        log.setLevel('DEBUG')
+        
+        dc = {
+            "script_in_path": r"C:\Users\tglaubach\repos\jupyter-script-runner\src\scripts\00_example_script.ipynb".replace('\\', '/'),
+            # ... other script attributes
+        }
+
+        api.post(dc)
+        tick()
+    else:
+        run()
