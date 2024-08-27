@@ -1,5 +1,6 @@
 
 import datetime
+import enum
 from typing import Any, Dict
 import requests
 
@@ -7,16 +8,17 @@ from sqlmodel import Session, create_engine, SQLModel, select
 from JupyRunner.core import schema, helpers
 
 
-
+log = helpers.log
 
 config = None
 url = None
+client = None
 
 def setup(cnfg):
-    global config, url
+    global config, url, client
     config = cnfg
-    url = config['globals']['url']
-    
+    url = config['globals']['dbserver_uri']
+    client = APIClient(url)    
 
 def start(cnfg):
     global config
@@ -29,24 +31,77 @@ def start(cnfg):
 class APIClient:
     def __init__(self, base_url:str=None):
         self.base_url = url if base_url is None else base_url
+        
+    
+    def _url(self, endpoint):
+        return f"{self.base_url.rstrip('/')}/{str(endpoint).lstrip('/')}".rstrip('/')
+    
+    def _json(self, dc):
+        if isinstance(dc, dict):
+            return {k:self._json(d) for k, d in dc.items()}
+        elif isinstance(dc, list):
+            return [self._json(d) for d in dc]
+        elif isinstance(dc, (datetime.datetime, datetime.date)):
+            return helpers.make_zulustr(dc, remove_ms=False)
+        elif isinstance(dc, (enum.IntEnum, enum.StrEnum, schema.STATUS, schema.STATUS_DATAFILE, schema.DATAFILE_TYPE)):
+            return dc.name
+        else:
+            return dc
 
+    def validate(self, inp, outp):
+        for key, v in inp.items():
+            assert key in outp, f'{key=} is missing in response! {outp=}'
+            if key == 'last_time_changed':
+                assert inp[key] < outp[key], f'last_time_changed <= before {inp[key]=} < {outp[key]=}'
+            elif isinstance(inp[key], str) and isinstance(outp[key], str) and helpers.parse_zulutime(inp[key]) and helpers.parse_zulutime(outp[key]):
+                vin, vout = inp[key], outp[key]
+                vin = helpers.parse_zulutime(vin)
+                vout = helpers.parse_zulutime(vout)
+                assert vin == vout, f'{key=} was not updated! {vin=} != {vout=}'
+            elif isinstance(inp[key], dict) and isinstance(outp[key], dict):
+                pass # dont check for dict update
+            else:
+                assert inp[key] == outp[key], f'{key=} was not updated! {inp[key]=} != {outp[key]=}'
+        return outp
+    
     def get(self, endpoint, params=None):
-        url = f"{self.base_url}/{endpoint}".rstrip('/')
+        url = self._url(endpoint)
+        log.debug(f'GET: {url} {params=}')
         response = requests.get(url, params=params)
         response.raise_for_status() 
         return response.json()
         
+    def put(self, endpoint, data=None):
+        url = self._url(endpoint)
+        data = self._json(data)
+        log.debug(f'PUT: {url} {data=}')
+        response = requests.put(url, json=data)
+        response.raise_for_status()  # Raise an exception for error responses
+        resp = response.json()
+        self.validate(data, resp)
+        return resp
+
+
     def post(self, endpoint, data=None):
-        url = f"{self.base_url}/{endpoint}".rstrip('/')
+        url = self._url(endpoint)
+        data = self._json(data)
+        log.debug(f'POST: {url} {data=}')
         response = requests.post(url, json=data)
         response.raise_for_status()  # Raise an exception for error responses
-        return response.json()
+        resp = response.json()
+        self.validate(data, resp)
+        return resp
+        
 
     def patch(self, endpoint, data:Dict[str, Any]|None=None):
-        url = f"{self.base_url}/{endpoint}".rstrip('/')
+        url = self._url(endpoint)
+        data = self._json(data)
+        log.debug(f'POST: {url} {data=}')
         response = requests.patch(url, json=data)
         response.raise_for_status()  # Raise an exception for error responses
-        return response.json()
+        resp = response.json()
+        self.validate(data, resp)
+        return resp
     
 class ModelClient(APIClient):
     def __init__(self, cls:schema.Script|schema.Device|schema.Datafile|schema.ProjectVariable, base_url:str=None):
@@ -63,7 +118,7 @@ class ModelClient(APIClient):
         return f'{self._base_url}/{self.route}'
     
     def get(self, object_id):
-        return self.cls(**super().get(str(object_id)))
+        return self.cls.model_validate(super().get(str(object_id)))
     
     def get_all(self):
         return [self.cls(**kwargs) for kwargs in super().get('')]
@@ -71,15 +126,21 @@ class ModelClient(APIClient):
     def post(self, data=None):
         if not isinstance(data, dict):
             data = data.model_dump()
-        return super().post('', data)
+        return self.cls.model_validate(super().post('', data))
     
     def put(self, data=None):
         if not isinstance(data, dict):
             data = data.model_dump()
-        return super().put(data['id'], data)
+        return self.cls.model_validate(super().put(data['id'], data))
     
-    def patch(self, object_id, data: Dict[str, Any] | None = None):
-        return super().patch(object_id, data)
+    def patch(self, object_id, data: Dict[str, Any] | None = None, **kwargs):
+        if kwargs and not data:
+            data = kwargs
+        elif kwargs and data:
+            data.update(kwargs)
+        res = super().patch(object_id, data)
+        log.debug(f'PATCH {object_id=} --> {res=}')
+        return self.cls.model_validate(res)
     
 class ScriptClient(ModelClient):
     def __init__(self, base_url: str = None):
@@ -107,7 +168,7 @@ class ScriptClient(ModelClient):
         url = f"{self._base_url}/qry/{self.route}".rstrip('/')
         response = requests.get(url, params=kwargs)
         response.raise_for_status() 
-        return response.json()
+        return [self.cls.model_validate(v) for v in response.json()]
     
 
 class DeviceClient(ModelClient):

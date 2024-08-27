@@ -213,7 +213,7 @@ def get_script_save_filepath(dtime:datetime.datetime, experiment_id:int, device_
 def get_script_save_dir(dtime:datetime.datetime, experiment_id:int, device_id:str, experiment_name:str, tag:str=None, make_dir=False):
     time = dtime.strftime(timeformat_str)
     tag = ('_' + tag.strip().replace(' ', '')) if tag else ''
-    subdir = f"{device_id}/{time}_{experiment_id}_{device_id}_exp_{experiment_name}{tag}"
+    subdir = f"{device_id}/{time}_{experiment_id}_{device_id}_s_{experiment_name}{tag}"
     fulldir = join(default_dir_data, subdir)
     if make_dir:
         mkdir(fulldir, raise_ex=True)

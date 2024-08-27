@@ -1,12 +1,22 @@
 import re
 import dateutil.parser, datetime, time, logging, sys
 
+
+log_level = logging.DEBUG
+
+
 log = logging.getLogger()
-level = logging.INFO
-fmt = "[ %(levelname)s - %(asctime)s - %(name)s - %(filename)s:%(lineno)s] %(message)s"
-frmatter = logging.Formatter(fmt, datefmt='%Y-%m-%d %H:%M:%S%z')
-log.setLevel(level)
+
+logging.getLogger('sqlalchemy.engine').setLevel(logging.WARNING)
+
+formatter = logging.Formatter("[ %(levelname)s - %(asctime)s - %(name)s - %(filename)s:%(lineno)s] %(message)s", datefmt='%Y-%m-%d %H:%M:%S%z')
+log.setLevel(logging.DEBUG)
 streamHandler = logging.StreamHandler(sys.stdout)
+streamHandler.setLevel(log_level)  # Set the stream handler level to DEBUG
+streamHandler.setFormatter(formatter)
+log.addHandler(streamHandler)
+
+
 
 def tomorrow_iso(remove_ms = True):
     return make_zulustr(get_utcnow() + datetime.timedelta(hours=24), remove_ms=remove_ms)
@@ -54,23 +64,30 @@ def match_zulutime(s):
         return None
 
 
-def parse_zulutime(s):
+def parse_zulutime(s:str)->datetime.datetime:
+    '''will parse a zulu style string to a datetime.datetime object. Allowed are
+        "2022-06-09T10:05:21.123456Z"
+        "2022-06-09T10:05:21Z" --> Microseconds set to zero
+        "2022-06-09Z" --> Time set to "00:00:00.000000"
+    '''
     try:
         if re.match(r'[0-9]{4}-[0-9]{2}-[0-9]{2}Z', s) is not None:
             s = s[:-1] + 'T00:00:00Z'
-        return dateutil.parser.isoparse(s) #.replace(tzinfo=datetime.timezone.utc)
+        return dateutil.parser.isoparse(s).replace(tzinfo=None)#.replace(tzinfo=datetime.utc)
     except Exception:
         return None
+    
+
 
 def __get_starttime(row):
-    if 'time_started_iso' in row and parse_zulutime(row['time_started_iso']):
-        return parse_zulutime(row['time_started_iso'])
+    if 'time_started' in row and parse_zulutime(row['time_started']):
+        return parse_zulutime(row['time_started'])
     elif parse_zulutime(row['start_condition']):
         return parse_zulutime(row['start_condition'])
     
 def __get_endtime(row):
-    if 'time_finished_iso' in row and match_zulutime(row['time_finished_iso']):
-        return parse_zulutime(row['time_finished_iso'])
+    if 'time_finished' in row and match_zulutime(row['time_finished']):
+        return parse_zulutime(row['time_finished'])
     elif 'end_condition' in row and parse_zulutime(row['end_condition']):
         return parse_zulutime(row['end_condition'])
     else:

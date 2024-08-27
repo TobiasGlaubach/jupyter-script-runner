@@ -108,8 +108,10 @@ class Device(SQLModel, table=True):
     data_json: Optional[dict] = Field(sa_column=Column(JSON))
     last_time_changed: datetime.datetime = Field(nullable=False, default_factory=helpers.get_utcnow)
 
-    scripts: list["Script"] = Relationship(back_populates="device")
-    datafiles: list["Datafile"] = Relationship(back_populates="device")
+    scripts: list["Script"] = Relationship(back_populates="device", sa_relationship_kwargs={"lazy": "selectin"})
+    datafiles: list["Datafile"] = Relationship(back_populates="device", sa_relationship_kwargs={"lazy": "selectin"})
+    def append_error_msg(self, err):
+        self.errors += '\n' + str(err)
 
 def get_default_params():
     return {'follow_up_script' : {'script_in_path': '', 'script_params_json': {}}}
@@ -126,7 +128,7 @@ class Script(SQLModel, table=True):
     default_data_dir: str = Field(default='', max_length=255, nullable=False)
 
     device_id:  str|None = Field(default=None, max_length=255, nullable=True, foreign_key="device.id")
-    script_params_json: Optional[dict] = Field(sa_column=Column(JSON), default_factory=get_default_params)
+    script_params_json: dict|None = Field(sa_column=Column(JSON), default_factory=get_default_params)
 
     start_condition: datetime.datetime = Field(nullable=False, default_factory=helpers.get_utcnow)
     end_condition: datetime.datetime = Field(nullable=False, default_factory=lambda : helpers.get_utcnow() + datetime.timedelta(hours=24))
@@ -144,8 +146,8 @@ class Script(SQLModel, table=True):
 
     last_time_changed: datetime.datetime = Field(nullable=False, default_factory=helpers.get_utcnow)
 
-    device: Device | None = Relationship(back_populates="scripts")
-    datafiles: list["Datafile"] = Relationship(back_populates="script")
+    device: Device | None = Relationship(back_populates="scripts", sa_relationship_kwargs={"lazy": "selectin"})
+    datafiles: list["Datafile"] = Relationship(back_populates="script", sa_relationship_kwargs={"lazy": "selectin"})
 
     @staticmethod
     def construct(script_in_path, 
@@ -188,6 +190,13 @@ class Script(SQLModel, table=True):
         assert self.script_out_path, 'no "script_out_path" given yet to get a script folder from!'
         return os.path.dirname(self.script_out_path)
     
+    def set_script_name(self, force_overwrite=False):
+        if self.script_name and not force_overwrite:
+            return self.script_name
+        
+        self.script_name = os.path.basename(self.script_in_path)
+        return self.script_name
+    
     def set_script_version(self, force_overwrite=False):
         if self.script_version and not force_overwrite:
             return self.script_version
@@ -218,7 +227,7 @@ class Script(SQLModel, table=True):
         if name.startswith('analysis_'): name = name[len('analysis_'):]
         if name.startswith('base_'): name = name[len('base_'):]
 
-        device_id = self.device_id if self.device_id else 'no_device'
+        device_id = self.device_id if self.device_id else 'nd'
         script_id = self.id
         pth_out = filesys.get_script_save_filepath(self.time_started, script_id, device_id, name, make_dir=False)
 
@@ -239,16 +248,24 @@ class Script(SQLModel, table=True):
     def append_error_msg(self, err):
         self.errors += '\n' + str(err)
 
+    def test_for_start_condition(self):
+        if self.start_condition:
+            tstart = self.start_condition
+            utcnow = helpers.get_utcnow()
+            return utcnow >= tstart
+        else:
+            raise Exception(f'start_condition signature did not match expected')
+
 
 class Datafile(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     script_id: int = Field(nullable=False, foreign_key="script.id")
-    device_id: str = Field(max_length=255, nullable=False, foreign_key="device.id")
-    filename: str = Field(max_length=255, nullable=False, default_factory="")
+    device_id: str = Field(max_length=255, nullable=True, foreign_key="device.id")
+    filename: str = Field(max_length=255, nullable=False, default="")
 
     tags: List[str] = Field(sa_column=Column(JSON), default_factory=lambda: [])
-    meas_name: str = Field(max_length=255, nullable=False)
-    status: STATUS_DATAFILE = Field(nullable=False)  # Consider using an enum for status
+    meas_name: str = Field(max_length=255, nullable=False, default='')
+    status: STATUS_DATAFILE = Field(nullable=False, default=STATUS_DATAFILE.INITIALIZED)
     errors: str = Field(default='', nullable=False)
     data_type: DATAFILE_TYPE = Field(default=DATAFILE_TYPE.UNKNOWN, nullable=False)
     mime_type: str = Field(default='', nullable=False)
@@ -260,9 +277,11 @@ class Datafile(SQLModel, table=True):
     last_time_changed: datetime.datetime = Field(nullable=False, default_factory=helpers.get_utcnow)
 
     # Relationships with the Script and Device tables
-    script: Script | None = Relationship(back_populates="datafiles")
-    device: Device | None = Relationship(back_populates="datafiles")
+    script: Script | None = Relationship(back_populates="datafiles", sa_relationship_kwargs={"lazy": "selectin"})
+    device: Device | None = Relationship(back_populates="datafiles", sa_relationship_kwargs={"lazy": "selectin"})
 
+    def append_error_msg(self, err):
+        self.errors += '\n' + str(err)
 
 
 class ProjectVariable(SQLModel, table=True):
@@ -273,8 +292,9 @@ class ProjectVariable(SQLModel, table=True):
     time_initiated: datetime.datetime = Field(nullable=False, default_factory=helpers.get_utcnow)
     last_time_changed: datetime.datetime = Field(nullable=False, default_factory=helpers.get_utcnow)
 
-    
+    def append_error_msg(self, err):
+        self.errors += '\n' + str(err)
 
-schema_dc = {cls.__name__: cls.__tablename__ for cls in [Script, Datafile, ProjectVariable, Device, Device]}
-schema_cls_dc = {cls: cls.__tablename__ for cls in [Script, Datafile, ProjectVariable, Device, Device]}
+schema_dc = {cls.__name__: cls.__tablename__ for cls in [Script, Datafile, ProjectVariable, Device]}
+schema_cls_dc = {cls: cls.__tablename__ for cls in [Script, Datafile, ProjectVariable, Device]}
 schema_cls_dc_inv = {v:k for k, v in schema_cls_dc.items()}
