@@ -1,0 +1,387 @@
+    
+
+{% extends "base.html" %}
+
+{% block metatags %}
+<title>JupyRunner WebUI - Script Table</title>
+<meta name="description" content="JupyRunner script table">
+{% endblock %}
+
+
+{% block content %}
+
+<div>
+
+    <div class="container">
+        <div class="input-group input-group-sm mb-3">
+        
+            <!-- <input type="text" id="daterange" name="daterange" value="{{ date_range }}" /> -->
+            <div class="input-group-prepend"><span class="input-group-text">Date (inclusive):</span></div>
+            <!-- Datepicker input -->
+
+            <div class="input-group-prepend">
+                <span class="input-group-text">from</span>
+            </div>
+            <input type="date" class="form-control" placeholder="" id="datepicker-start" value="" style="min-width: 120px;" >
+            <div class="input-group-prepend"><span class="input-group-text">to</span></div>
+            <input type="date" class="form-control" placeholder="" id="datepicker-end" value="" style="min-width: 120px;"  >
+
+
+            <div class="input-group-prepend"><span class="input-group-text">Items to Get N=</span></div>
+    
+            <input type="number" class="form-control" id="nItems" value="50">
+    
+            <div class="input-group-prepend"><span class="input-group-text">Items to Skip M=</span></div>
+            <input type="number" class="form-control" id="skipItems" value="0">
+            <button onclick="refresh()" class="btn btn-primary" type="button">Reload</button>
+        </div>  
+    </div>
+
+    <hr>
+
+    <div class="">
+        <div class="row justify-content-md-left" style="width: 100%;">
+            <div class="col-md-auto">
+                <a id="qry-url" href=""></a>
+            </div>
+            <div class="col-md-auto">
+                <pre id="query-text"></pre>
+            </div>
+            <div class="col-md-auto">
+                <span id="query-result"></span>
+            </div>
+        </div>
+    </div>
+
+    <hr>
+    <div id="wrapper">
+        
+    </div>
+    
+</div>
+
+<script type="text/javascript">
+
+
+
+
+// Dynamic Width (Build Regex)
+function wrap(s, w) {
+    return s ? s.replace(new RegExp(`(?![^\\n]{1,${w}}$)([^\\n]{1,${w}})\\s`, 'g'), '$1\n') : '';
+}
+
+
+function wrapText(text, maxLineWidth) {
+    const words = text.split(' ');
+    let lines = [];
+    let currentLine = '';
+
+    for (let word of words) {
+        if (currentLine.length + word.length + 1 > maxLineWidth) {
+            lines.push(currentLine);
+            currentLine = '';
+        }
+        currentLine += word + ' ';
+    }
+
+    if (currentLine.length > 0) {
+        lines.push(currentLine);
+    }
+
+    return lines.join('\n');
+}
+
+cmap1 = {
+            '#AF7AC5': 'INITIALIZING AWAITING_CHECK'.split(' '), // mangenta
+            '#2ECC71': 'WAITING_TO_RUN HOLD STARTING'.split(' '), // light green
+            '#7FB3D5': 'RUNNING FINISHING AWAITING_POST_PROC'.split(' '), // light blue
+            '#1D8348': ['FINISHED'], // green
+            '#A04000': 'POST_PROC_FAILED FAULTY CANCELLED ABORTED'.split(' ')
+        }
+
+const invertedCmap1 = {};
+// Iterate over each entry in the original cmap1 dictionary
+for (const [color, statuses] of Object.entries(cmap1)) {
+    // Iterate over each status in the list of statuses
+    statuses.forEach(status => {
+        invertedCmap1[status] = color;
+    });
+}
+
+function get_color_from_status(status){ 
+    if(status in invertedCmap1){
+        return invertedCmap1[status];
+    } else {
+        return '#E74C3C';
+    }
+}   
+
+
+// // Initialize the datepicker
+// $('.datepicker-start').datepicker({
+//     format: 'yyyy-mm-dd',
+//     autoclose: true,
+//     todayHighlight: true
+// });
+
+// Set the date to UTC
+function setUTCDate(date, key) {
+    $(`#datepicker-${key}`).value = date;
+}
+
+// Get the UTC date
+function getUTCDate(key) {
+    return $(`#datepicker-${key}`).value;
+}
+
+// Event handler for date change
+$('.datepicker-start').on('change', function(event) {
+    updateUrl();
+});
+$('.datepicker-end').on('change', function(event) {
+    updateUrl();
+});
+
+function updateUrl() {
+    const end_date = getUTCDate('end');
+    const start_date = getUTCDate('start');
+    const n = document.getElementById('nItems').value;
+    const skip = document.getElementById('skipItems').value;
+    
+    const urlParams = new URLSearchParams();
+    urlParams.append('n_max', n);
+    urlParams.append('skipn', skip);
+    if (end_date) {
+        urlParams.append('end_date', end_date);
+    }
+    
+
+    const url = `/qry/tabledata?${urlParams.toString()}`;
+
+    document.getElementById('qry-url').setAttribute('href', url);
+    document.getElementById('qry-url').innerText = url;
+    console.log(url);
+    return url;
+}
+
+
+var searchParams = new URLSearchParams(window.location.search);
+document.getElementById('nItems').value = searchParams.get("n") ? searchParams.get("n") : 50;
+document.getElementById('skipItems').value = searchParams.get("skipItems") ? searchParams.get("skipItems") : 0;
+setUTCDate(searchParams.get("end_date") ? searchParams.get("end_date") : '', 'end');
+setUTCDate(searchParams.get("start_date") ? searchParams.get("start_date") : '', 'start');
+
+// $('#sandbox-container .input-daterange').datepicker({
+// });
+
+
+// $('#datepicker').on('change', function (ev) {
+//     updateUrl();
+// });
+
+$( "#nItems" ).change(function() {
+    updateUrl();
+});
+
+$( "#datepicker" ).change(function() {
+    updateUrl();
+});
+
+function refresh() {
+    var searchParams = new URLSearchParams(window.location.search);
+
+    searchParams.set("n_max", document.getElementById("nItems").value);
+    searchParams.set("skipn", document.getElementById("skipItems").value);
+    searchParams.set("end_date", getUTCDate());
+    window.location.search = searchParams.toString();
+}
+
+// assumes: 
+// id device_id script_params_json status script_out_path files start_condition end_condition comments time_finished script_name script_version errors script_in_path
+function loadata() {
+    try {
+        const url = updateUrl();
+        
+        
+
+        fetch(url)
+        .then(function(response) {
+            return response.json();
+        })
+        .then(function(obj) {
+            const iid = obj['columns'].indexOf('id');
+            const i_errors = obj['columns'].indexOf('errors');
+            const i_inp = obj['columns'].indexOf('script_in_path');
+
+            let columns = [
+                { 
+                        name: 'id',
+                        formatter: (cell, row) => { 
+                            if (cell) {
+                                    return gridjs.html(`<a href='/script/${cell}' target="_blank">${cell}</a>`);
+                                } else {
+                                    return gridjs.html('null')
+                                }
+                        }
+                },
+                'device_id',
+                { 
+                    name: 'script_params_json',
+                    formatter: (cell, row) => {
+                        var post = '';
+                        //var s1 = cell;
+                        try {
+                            const params = JSON.parse(cell);
+                            //s1 = JSON.stringify(JSON.parse(cell), null, 2);
+                            post += 'dt_track' in params ? ' | dt_track=' + params['dt_track'] : ''
+                            post += 'axis' in params ? ' | axis=' + params['axis'] : ''
+                            post += 'axes' in params ? ' | axes=' + params['axes'] : ''
+                            post += 'experiment_ids' in params ? ' | experiment_ids=' + params['experiment_ids'] : ''
+                        } catch (error) {
+                            console.log(error.message);
+                        }
+                        const s = `<a href='/qry/script/${row.cells[iid].data}/params' title="${cell}">params ${post}</a>`;
+
+                        return gridjs.html(s);
+                    },
+                    /* attributes: (cell) => {
+                    // add these attributes to the td elements only
+                    if (cell) { 
+                        const s = JSON.stringify(JSON.parse(cell), null, 2);
+                        return {
+                        'data-cell-content': cell,
+                        'onclick': () => alert(s),
+                        'style': 'cursor: pointer',
+                        };
+                    }}*/
+                },
+                { 
+                    name: 'status',
+                    formatter: (cell, row) => {
+                        const errors = row.cells[i_errors].data;
+                        return gridjs.html(`<strong title="ERRORS: ${errors}"><pre style="color:${get_color_from_status(cell)};"> ${cell} </pre></strong>`);
+                    }
+                },
+                { 
+                    name: 'script_out_path',
+
+                    formatter: (cell, row) => {
+                        let s = cell ? cell.substring(cell.lastIndexOf('/') + 1) : 'null';
+                        s = s.replace('exp', ' exp').replace('ana', ' ana').replace('script', ' script');
+                        s = s.replace('.htm', ' .htm').replace('.ipy', '  .ipy');
+                        s = wrap(s, 20);
+                        return gridjs.html(`<a href="/show/${cell}" title="${cell}" style="font-size: small;">${s}</a>`);
+                    }
+                },
+                { 
+                    name: 'files',
+                    formatter: (cell, row) => {
+                        var s = '';
+                        if (cell.startsWith('0') || cell.startsWith('NO')) {
+                            s += '<strong><pre style="color:red;"> NONE </pre></strong>'
+                        } else {
+                            const tmp = 'n=' + cell.replace(' files', '');
+
+                            s += `<a href='/qry/script/${row.cells[iid].data}/datafiles' target="_blank">${tmp}</a>`;
+                            // s += ' | ';
+                            // s += `<a href='/plot_exp/${row.cells[iid].data}' target="_blank">plot</a>`;     
+                            // s += ' | ';
+                            // s += `<a href='/ui/plot?go=1&eid=${row.cells[iid].data}'&backend=plotly>ly</a>`;    
+                            // s += ' | ';
+                            // s += `<a href='/ui/plot?go=1&eid=${row.cells[iid].data}'&backend=pyplot>pg</a>`;    
+                        }
+
+                        return gridjs.html(s);
+                    }
+                },
+                { 
+                        name: 'start_condition',
+                        formatter: (cell, row) => {
+                            return gridjs.html(`<div style="font-size: small;">${wrap(cell, 10)}</div>`);
+                        }
+                },
+                { 
+                        name: 'end_condition',
+                        formatter: (cell, row) => {
+                            return gridjs.html(`<div style="font-size: small;">${wrap(cell, 10)}</div>`);
+                        }
+                },
+                { 
+                        name: 'comments',
+                        formatter: (cell, row) => {
+                            const ttl = cell;
+                            const s = cell.length > 40 ? cell.substring(0, 40) + '...' : cell;
+                            return gridjs.html(`<div data-toggle="tooltip" data-placement="top" title="${ttl}" style="font-size: small;">${s}</div>`)
+                        }
+                },
+
+                'time_finished',
+                {
+                    
+                    name: 'script_name',
+
+                    formatter: (cell, row) => {
+                        const script_in_path = row.cells[i_inp].data;
+                        return gridjs.html(`<a href="/show/${script_in_path}" title="${cell}" style="font-size: small;">${cell}</a>`);
+                    }
+
+                },
+                'script_version',
+                'errors',
+                'script_in_path'
+            ];
+            document.getElementById("wrapper").innerHTML='';
+            console.log(obj);
+
+            let grid = new gridjs.Grid({columns: columns, data: obj['data'],
+                search: true,
+                sort: true,
+                resizable: true,
+                pagination: {
+                    limit: 50,
+                    summary: false
+                }
+            });
+
+            grid.render(document.getElementById("wrapper"));
+
+            const nR = obj['data'].length;
+            document.getElementById('query-text').innerText = `QUERY="${wrapText(obj['queries'], 150)}"`
+            
+            setAlert(`SUCCESS RESULT: N=${nR} scripts`)
+            
+        })
+    } catch (error) {
+        setAlert(error.message);
+        alert(error.message);
+    }
+}
+
+
+
+loadata();
+
+function matchErrorKeyword(text) {
+  const regex = /error/i; // 'i' flag for case-insensitive matching
+  return regex.test(text);
+}
+function matchSuccessKeyword(text) {
+  const regex = /success/i; // 'i' flag for case-insensitive matching
+  return regex.test(text);
+}
+function setAlert(s, color=null) {
+    const c = color ? color : (matchErrorKeyword(s) ? 'danger' : (matchSuccessKeyword(s) ? 'success' : 'info'));
+
+    const alertElement = document.createElement('div');
+    alertElement.classList.add('alert', `alert-${c}`, 'alert-dismissible', 'fade', 'show');
+    alertElement.role = 'alert';
+    alertElement.textContent = new Date().toISOString() + ' | ' + s;
+    alertElement.style.margin="2px"
+    // alertElement.style.maxHeight='22px'
+    // alertElement.style.overflowX='auto';
+
+    document.getElementById('query-result').innerHTML = '';
+    document.getElementById('query-result').appendChild(alertElement);
+}
+</script>
+{% endblock %}

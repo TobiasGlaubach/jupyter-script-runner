@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <!-- <meta name="viewport" content="width=device-width, initial-scale=1.0"> -->
+    <title>JupyRunner Script FileData Plotting</title>
+    <!-- Plotly.js -->
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <!-- Bootstrap CSS -->
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/css/bootstrap.min.css">
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/popper.js@1.12.9/dist/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.0.0/dist/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl" crossorigin="anonymous"></script>
+    <!-- <script src="https://cdn.jsdelivr.net/simplemde/latest/simplemde.min.js"></script> -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.13.0/css/all.min.css" integrity="sha256-h20CPZ0QyXlBuAw7A+KluUYx/3pK+c7lYEpqLTlxjYQ=" crossorigin="anonymous" />
+    <link href="https://fonts.googleapis.com/css2?family=Roboto&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@9"></script>
+    <script src="https://unpkg.com/micromodal/dist/micromodal.min.js"></script>
+
+</head>
+<body>
+
+
+
+    <nav class="navbar navbar-expand-lg navbar-light bg-light">
+    <div class="container-fluid">
+        <a class="navbar-brand" href="/plot_data_ui">JupyRunner Data Plotting</a>
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNavDropdown" aria-controls="navbarNavDropdown" aria-expanded="false" aria-label="Toggle navigation">
+        <span class="navbar-toggler-icon"></span>
+        </button>
+        <div class="collapse navbar-collapse" id="navbarNavDropdown">
+        <ul class="navbar-nav">
+            <li class="nav-item">
+                <a class="nav-link active" aria-current="page" href="/ping">Home</a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" href="/showfancy">Table</a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" href="/plot_data_ui">Plotting</a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" href="/set_props">Edit Props</a>
+            </li>
+        </ul>
+        </div>
+
+        <!-- <form class="d-flex">
+        <input class="form-control me-2" type="search" placeholder="Search" aria-label="Search">
+        <button class="btn btn-outline-success" type="submit">Search</button>
+        </form> -->
+
+    </div>
+    </nav>
+
+    <!-- <h3 class="my-4">JupyRunner Experiment Data Plotting</h3> -->
+    
+    <div class="container">
+
+        <br>
+        <div class="input-group input-group-sm mb-3">
+            
+            <div class="input-group-prepend"><span class="input-group-text">Exp. ID:</span></div>
+            <input type="number" class="form-control" id="eidInput" value="">
+            <button id="eidButton" class="btn btn-warning" type="button">Set</button>
+
+            <div class="input-group-prepend"><span class="input-group-text">Interval:</span></div>        
+            <input type="text" class="form-control" id="intervalInput" value="1s" placeholder="1s" style="max-width: 60px;"> 
+
+            <div class="input-group-prepend"><span class="input-group-text">Agg-fun:</span></div>        
+            <input type="text" class="form-control" id="funInput" placeholder="median" value="median"> 
+
+            <div class="input-group-prepend"><span class="input-group-text">Drop first N:</span></div>        
+            <input type="number" class="form-control" id="nInput" value="0" placeholder="N="> 
+
+            <div class="input-group-prepend"><span class="input-group-text">Drop last M:</span></div>        
+            <input type="number" class="form-control" id="neInput" value="0" placeholder="M="> 
+
+            <div class="input-group-prepend"><span class="input-group-text">Query:</span></div>
+            <input type="text" class="form-control" id="qryInput" value="" placeholder="`str.r` < 100" style="min-width: 150px;"> 
+            
+            <div class="input-group-append"><span class="input-group-text">X-Axis in Seconds?:</span></div>
+            <input type="number" class="form-control" id="asSecInput" placeholder="0|1" value="0" style="max-width: 50px;">
+            
+        </div>
+        <!-- mb-3 -->
+        <div class="input-group input-group-sm mb-3">
+            <div class="input-group-prepend"><span class="input-group-text">Append?: </span></div>
+            <input type="number" class="form-control" id="inpAppend" placeholder="0|1" value="0" style="max-width: 50px;">
+            <div class="input-group-prepend"><span class="input-group-text">Data-IDs (comma separated):</span></div>
+            <input type="text" class="form-control" id="idInput" placeholder="e.g., 2658,2659" value="{{ mids }}">
+            <button id="plotButton" class="btn btn-primary" type="button">Plot Data</button>
+        </div>
+
+    
+        <div>
+            <span>
+                <code id="infobar"></code>
+                <code id="progressbar"></code>
+            </span>
+        </div>
+        <!-- <div id="progressbar" class="my-4"></div> -->
+        <div id="graphContainer"></div>
+    </div>
+
+    <script>
+        // Configuration
+        const API_ENDPOINT = 'get_data_plot';
+        const API_PLOT = 'plot_track';
+        
+        const API_ENDPOINT_EID = 'get_exp_metadata';
+        const API_ENDPOINT_EXP = 'experiments';
+
+        const channels = ['acu.azimuth.p_act', 'acu.azimuth.p_set', 'acu.elevation.p_act', 'acu.elevation.p_set', 'str.x', 'str.y'];
+        const axs = [1,1, 2,2, 3,3];
+
+        const u = new URL(document.location.toString())
+        const parts = u.pathname.split('/'); 
+        const eid = parts[parts.length-1];
+
+        let params = new URL(document.location.toString()).searchParams;
+        let go = params.get("go") === null? 0 : 1;
+
+        let plt = params.get("plt") === null? 0 : 1;
+
+        async function plot() {
+            const ids = document.getElementById('idInput').value.split(',').map(id => id.trim()).filter(function (el) {
+                return el != null;
+            });
+            const eid = document.getElementById('eidInput').value;
+            const nDrop = document.getElementById('nInput').value;
+            const neDrop = document.getElementById('neInput').value;
+            const interval = document.getElementById('intervalInput').value;
+            const fun = document.getElementById('funInput').value;
+            const asSec = document.getElementById('asSecInput').value;
+            const q = document.getElementById('qryInput').value.replace('"', "`").replace("'", "`");
+
+            args = {};
+
+            if(q) {
+                args['q'] = q;
+            }
+            if (interval) {
+                args['interval'] = interval;
+            }
+            if (fun) {
+                args['fun'] = fun;
+            }
+            if (asSec) {
+                args['as_sec'] = 1;
+            }
+
+            if (nDrop) {
+                args['drop_start'] = nDrop;
+            }
+
+            if (neDrop) {
+                args['drop_end'] = neDrop;
+            }
+
+            const urlq = '?' + new URLSearchParams(args);
+            
+            const graphs = {};
+
+            document.getElementById('graphContainer').innerHTML = '';
+            var container = document.getElementById('graphContainer');
+            var prog = document.getElementById('progressbar');
+            var count = 0;
+            var N = ids.length;
+            
+            
+            const response = await fetch(`/${API_ENDPOINT_EXP}/${eid}`);
+            var e1 = document.createElement('code');
+            e1.style = 'font-size:0.65em;'
+            var dc = await response.json();
+            for (const key in dc) {
+                if ( key.endsWith('json') ) {
+                    dc[key] = JSON.parse(dc[key]);
+                }
+            }
+            var e2 = document.createElement('pre');
+            e2.innerText = JSON.stringify(dc, null, 4);
+            e1.innerHTML = e2.outerHTML;
+            // e1.innerText = JSON.stringify(dc, null, 4);
+            
+
+            for (const id of ids) {
+                try {
+                    count += 1;
+
+                    if (!id) {
+                        continue;
+                    }
+                    const mid = `meas_${id}`;
+
+                    const valeur = String(Math.round(count / N*100));
+                    
+                        
+                    const div = document.createElement('div');
+                    div.id = mid;
+                    div.style = 'width:100%;height:300px;';
+                    
+
+                    if (plt) {
+                        let img = document.createElement('img');
+                        const url = args ? `/${API_PLOT}/${id}` + urlq : `/${API_ENDPOINT}/${id}`;
+                        img.setAttribute('src', url);
+                        div.innerHTML = img.outerHTML;
+                        prog.innerText = `${count}/${N} | ${mid}`;
+
+                    } else {
+
+                        const url = args ? `/${API_ENDPOINT}/${id}` + urlq : `/${API_ENDPOINT}/${id}`;
+                        const response = await fetch(url);
+                        if (!response.ok) {
+                            const text = await response.text();
+                            throw `HTTP ERROR ${response.status}: ${text}`;
+                        }
+
+                        const data = await response.json();
+                        const time = data['time'];  
+
+                        prog.innerText = `${count}/${N} | ${mid} | n=${time.length} points`;
+                                    
+                        const kid = `AZ`;
+                        const kid2 = `EL`;
+                        const kid3 = `STR`;
+                        const layout = {
+                                title: `${count+1}/${N} | ${mid} | ${url}`,
+                                xaxis: { domain: [0, 0.28] },
+                                xaxis2: { domain: [0.34, 0.62] },
+                                xaxis3: { domain: [0.68, 1.0] },
+
+                                yaxis: { title: kid, },
+                                yaxis2: { title: kid2, anchor: "x2"},
+                                yaxis3: { title: kid3, anchor: "x3"},      
+                                showlegend: false,
+
+                                // legend: {
+                                //     x: 0,
+                                //     xanchor: 'right',
+                                //     y: 1,
+                                //     orientation: "h"
+                                // }
+
+                            };
+                        var traces = [];
+                        var channel = '';
+
+                        for(let i=0; i<channels.length; i++) {
+                            const ax = axs[i];
+                            const channel = channels[i];
+                            if (channel in data) {
+                                traces.push({
+                                    x: time.slice(nDrop, time.length-neDrop),
+                                    y: data[channel].slice(nDrop, data[channel].length-neDrop),
+                                    mode: 'lines',
+                                    name: `${channel}`,
+                                    xaxis: "x" + ax,
+                                    yaxis: "y" + ax,
+                                });
+                            }
+                        }
+
+                        
+                        Plotly.newPlot(mid, traces, layout);
+                    }    
+
+                    container.appendChild(div);
+
+                } catch (error) {
+                    var e = document.createElement('code')
+                    e.innerText = `meas_${id} | ERROR: ${error}`;
+                    e.style = 'color:red;'
+                    container.appendChild(e);
+                    console.log(error);
+                }
+                container.appendChild(document.createElement('hr'));
+                
+            }
+            var h4 = document.createElement('h4');
+            h4.innerText = 'Experiment Info:'
+            container.appendChild(h4);
+            container.appendChild(e1);
+        }
+
+        async function updateEid() {
+            const eid = document.getElementById('eidInput').value;
+            const inpAppend = document.getElementById('inpAppend').value === 'on' ? 1 : 0;
+            document.getElementById('progressbar').innerHTML = '';
+
+            const response = await fetch(`/${API_ENDPOINT_EID}/${eid}`);
+            const data = await response.json();
+
+            const response2 = await fetch(`/${API_ENDPOINT_EXP}/${eid}`);
+            const data2 = await response2.json();
+            const name = data2['script_out_path'].split('/').pop();
+            const time_started = data2['time_started'];
+            const status = data2['status'];
+            document.getElementById('infobar').innerText = `${name} | ${status} on ${time_started} with N=${data.length} results`;
+
+            if(!inpAppend){
+                var ids = [];
+                data.forEach(row => {
+                ids.push(String(row['id']));
+                });
+                document.getElementById('idInput').value = ids.join();
+            }
+            if (go) {
+                await plot();
+            }
+        }
+        async function updateIds() {
+            
+            const inpAppend = document.getElementById('inpAppend').value;
+
+            if (inpAppend){
+                var ids = document.getElementById('idInput').value.split(',').map(id => id.trim());
+            } else {
+                var ids = [];
+            }
+            
+            const eid = document.getElementById('eidInput').value;            
+            const response = await fetch(`/${API_ENDPOINT_EID}/${eid}`);
+            const data = await response.json();
+            data.forEach(row => {
+                ids.push(String(row['id']));
+            });
+            document.getElementById('idInput').value = ids.join();
+        }
+
+        
+        document.getElementById('eidInput').addEventListener('input', async (evt) => {
+            await updateEid();
+        });
+        
+        document.getElementById('eidButton').addEventListener('click', async () => {
+            await updateIds();
+        });
+
+        document.getElementById('plotButton').addEventListener('click', async () => {
+            await plot();
+        });
+
+        document.getElementById('eidInput').value = eid;
+        
+
+        if (go) {
+            updateEid().then(result => {
+                // ...
+            });
+            updateIds().then(result => {
+                // ...
+            });
+            plot().then(result => {
+                // ...
+            })
+        }
+
+    </script>
+</body>
+</html>

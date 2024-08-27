@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en" class="h-100">
+	<head>
+		<!-- set the encoding of your site -->
+		<meta charset="utf-8">
+		<meta name="robots" content="noindex">
+		<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+		{% block metatags %}
+        {% endblock %}
+
+
+        <!-- <link href="/static/css/bootstrap.min.css" rel="stylesheet">
+        <link href="/static/css/all.min.css" rel="stylesheet">
+        <link href="/static/css/mermaid.min.css" rel="stylesheet">
+        <link href="/static/css/custom.css" rel="stylesheet">
+        <link href="/static/css/bootstrap-datepicker.min.css" rel="stylesheet">
+        
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+        
+        <script src="/static/js/jquery-3.7.1.slim.js"></script>
+		<script src="/static/js/bootstrap.bundle.min.js"></script>
+        <script src="/static/js/plotly-latest.min.js"></script>
+        <script src="/static/js/gridjs.umd.js"></script>
+
+        <script src="/static/js/micromodal.min.js"></script>
+        <script src="/static/js/sweetalert2@9"></script>
+        <script src="/static/js/simplemde.min.js"></script>
+        
+
+        <script src="/static/js/bootstrap-datepicker.min.js"></script>
+         -->
+
+         
+
+        <!-- <link href="https://fonts.googleapis.com/css2?family=Roboto&display=swap" rel="stylesheet"> -->
+        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.0.0/dist/css/bootstrap.min.css" integrity="sha384-Gn5384xqQ1aoWXA+058RXPxPg6fy4IWvTNh0E263XmFcJlSAwiGgFAW/dAiS6JXm" crossorigin="anonymous">
+        <!-- <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/jerosoler/Drawflow@0.0.48/dist/drawflow.min.css"> -->
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.13.0/css/all.min.css" integrity="sha256-h20CPZ0QyXlBuAw7A+KluUYx/3pK+c7lYEpqLTlxjYQ=" crossorigin="anonymous" />
+        <link rel="stylesheet" href="https://cdn.jsdelivr.net/simplemde/latest/simplemde.min.css">
+ 
+        <!-- mermaid is for gridjs -->
+        <link rel="stylesheet" href="/static/css/mermaid.min.css">
+        <link rel="stylesheet" href="/static/css/custom.css">
+
+        <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN" crossorigin="anonymous"></script>
+        <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.0.0/dist/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl" crossorigin="anonymous"></script>
+
+        <!-- <script src="https://cdn.plot.ly/plotly-2.34.0.min.js" charset="utf-8"></script> -->
+        <!-- <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script> -->
+        <!-- <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js" integrity="sha512-jB0TkTBeQC9ZSkBqDhdmfTv1qdfbWpGE72yJ/01Srq6hEzZIz2xkz1e57p9ai7IeHMwEG7HpzG6NdptChif5Pg==" crossorigin="anonymous" referrerpolicy="no-referrer"></script> -->
+        <!-- <script src="https://rawcdn.githack.com/nextapps-de/flexsearch/0.7.31/dist/flexsearch.bundle.js"></script> -->
+        <script src="https://cdn.jsdelivr.net/simplemde/latest/simplemde.min.js"></script>
+        <script src="https://unpkg.com/micromodal@0.4.10/dist/micromodal.min.js"></script>
+        <script src="/static/js/gridjs.umd.js"></script>
+
+        
+
+	</head>
+
+	<body class="d-flex flex-column h-100">
+		
+		<header id="pageHeader">  
+			<!-- Navbar -->
+            <div>
+                {% include "incl_navbar.html" %}
+            </div>
+		</header>
+		
+        <!-- class="flex-shrink-0" -->
+		<!-- <main>  -->
+        
+		<!-- Start Main content -->
+        <div id="content">{% block content %}{% endblock %}</div>
+
+		<!-- End Main content -->
+		<!-- </main>	 -->
+
+<script  type="text/javascript">
+    $(function () {
+        $('[data-toggle="tooltip"]').tooltip()
+        })
+</script>
+
+<!-- 
+        <script src="https://cdn.jsdelivr.net/npm/popper.js@1.12.9/dist/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q" crossorigin="anonymous"></script>
+        <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.0.0/dist/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl" crossorigin="anonymous"></script> -->
+
+
+	</body>
+</html>

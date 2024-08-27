@@ -1,0 +1,193 @@
+
+
+    
+
+{% extends "base.html" %}
+
+{% block metatags %}
+<title>JupyRunner WebUI - Script Table</title>
+<meta name="DESCRIPTION" content="MeerTest script table">
+{% endblock %}
+
+
+{% block content %}
+
+
+
+    <div style="margin: 10px;">
+
+        <h4>Edit Any Database Object</h4>
+
+        <div class="input-group input-group-sm mb-3">
+            <div class="input-group-prepend"><span class="input-group-text">Table:</span></div>
+            <select class="form-select form-select-sm" id="inpTable"  style="max-width: 140px;">
+                <option selected value="script">script</option>
+                <option value="device">device</option>
+                <option value="datafile">datafile</option>
+                <option value="projectvariable">projectvariable</option>
+            </select>
+            <input type="text" class="form-control" id="inpId" placeholder="str for device and projectvariable else int">
+            <div class="btn-group" role="group" aria-label="Basic example">
+                <button id="getIdsButton" class="btn btn-info" type="button">GET IDs</button>
+                <button id="getButton" class="btn btn-secondary" type="button">GET</button>
+            </div>
+
+        </div>
+
+        <h5>EDIT:</h5>
+
+        <div class="input-group input-group-sm mb-3">
+            <textarea class="form-control" id="inpObj" rows="20" placeholder="{click the GET button to show the object as json"></textarea>
+            <!-- <button id="getDefaultParamsButton" class="btn btn-warning" type="button">GO!</button> -->
+        </div>
+        <div class="input-group input-group-sm mb-3"></div>
+            <button id="patchButton" class="btn btn-danger" type="button">PATCH</button>
+        </div>
+        <div>
+            <h5>Results:</h5>
+            <div id="resultContainer">
+                <div id="resultText">
+                    Nothing done yet!
+                </div>
+            </div>
+        </div>
+
+    
+    
+
+    <script type="text/javascript">
+
+        
+    async function getObj() {
+            try { 
+                const table = document.getElementById('inpTable').value;
+                const id = document.getElementById('inpId').value;
+                fetch(`/${table}/${id}`, {
+                    method: 'GET',
+                })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Network response was not ok: ' + response.status + ' | ' + response.text());
+                    }
+                    return response.json()
+                })
+                .then(data => {
+                    let d = data;
+                    
+                    let s = `Successfully downloaded "${table}/${id}"": Results:`;
+                    s = new Date().toISOString() + ' | ' + s;
+                    console.log(s);
+                    document.getElementById('resultText').innerText = s;
+                    document.getElementById('resultText').style.color = 'blue';
+                    
+                    document.getElementById('inpObj').value = JSON.stringify(d, null, 4);
+                    document.getElementById('inpObj').style.color = 'blue';
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    let s = `ERROR while downloading "${table}/${id}". Results:`;
+                    document.getElementById('resultText').innerText = new Date().toISOString() + ' | ' + s;
+                    document.getElementById('resultText').style.color = 'red';
+
+                    document.getElementById('inpObj').value = `ERROR: ${error}`;
+                    document.getElementById('inpObj').style.color = 'red';
+                });
+
+            } catch (error) {
+                console.error('Error:', error);
+                let s = `ERROR while downloading object. Results:`;
+                document.getElementById('resultText').innerText = new Date().toISOString() + ' | ' + s;
+                document.getElementById('resultText').style.color = 'red';
+
+                document.getElementById('inpObj').value = `ERROR: ${error}`;
+                document.getElementById('inpObj').style.color = 'red';
+            }
+        }
+
+        async function upload(test_only) {
+            try { 
+                const table = document.getElementById('inpTable').value;
+                const id = document.getElementById('inpId').value;
+                const objJsonStr = document.getElementById('inpObj').value;
+                const objJson = JSON.parse(objJsonStr); // test JSON before sending!
+
+                // Prepare the PATCH request
+                fetch(`/${table}/${id}`, {
+                    method: 'PATCH',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: objJsonStr
+                })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Network response was not ok: ' + response.status + ' | ' + response.text());
+                    }
+                    return response.json()
+                })
+                .then(data => {
+                    let s = `Successfully 'PATCHED' input: "${table}/${id}". Results:`;
+                    s = new Date().toISOString() + ' | ' + s;
+                    console.log(s);
+                    document.getElementById('resultText').innerText = s;
+                    document.getElementById('resultText').style.color = test_only ? 'blue' : 'green';
+
+                    document.getElementById('inpObj').value = JSON.stringify(data, null, 4);
+                    document.getElementById('inpObj').style.color = test_only ? 'blue' : 'green';
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    let s = `ERROR while 'PATCHING': "${table}/${id}". Results:`;
+                    document.getElementById('resultText').innerText = new Date().toISOString() + ' | ' + s;
+                    document.getElementById('resultText').style.color = 'red';
+
+                    document.getElementById('inpObj').value = `ERROR: ${error}`;
+                    document.getElementById('inpObj').style.color = 'red';
+                });
+
+            } catch (error) {
+                console.error('Error:', error);
+                let s = `ERROR while 'PATCHING'. Results:`;
+                document.getElementById('resultText').innerText = new Date().toISOString() + ' | ' + s;
+                document.getElementById('resultText').style.color = 'red';
+
+                document.getElementById('inpObj').value = `ERROR: ${error}`;
+                document.getElementById('inpObj').style.color = 'red';
+            }
+        }
+
+        function queryTable(tablename) {
+            const url = `/qry/ids/${tablename}`;
+
+            fetch(url)
+                .then(response => response.json())
+                .then(data => {
+                const s = JSON.stringify({'tablename': tablename, 'ids': data}, null, 2); // Pretty-print JSON
+                console.log(s);
+                document.getElementById('resultText').innerText = s;
+                document.getElementById('resultText').style.color = 'blue';
+
+                })
+                .catch(error => {
+                console.error('Error fetching data:', error);
+                });
+        }
+
+        document.getElementById('inpObj').addEventListener('input', () => {
+            document.getElementById('inpObj').style.color = 'purple';
+        });
+
+        document.getElementById('getIdsButton').addEventListener('click', async () => {
+            queryTable(document.getElementById('inpTable').value);
+        });
+
+        document.getElementById('getButton').addEventListener('click', async () => {
+            await getObj();
+        });
+        document.getElementById('patchButton').addEventListener('click', async () => {
+            // alert('WIP!');
+            await upload(0);
+        });
+
+    </script>
+{% endblock %}

@@ -1,0 +1,448 @@
+
+
+    
+
+{% extends "base.html" %}
+
+{% block metatags %}
+<title>JupyRunner WebUI - Script Running Interface</title>
+<meta name="DESCRIPTION" content="JupyRunner script table">
+{% endblock %}
+
+
+{% block content %}
+
+
+
+<!--     
+    inps_dish = '119A skampi 121B'.split()
+    inps_what = 'VS.OCAL OSTR STRA'.split()
+    inps_how = 'last E199 new default given'.split()
+    inps_when = 'tonight now sunset +1h 16:00 2024-06-29T08:12:49Z 2024-06-30 2024-06-29T08:12:49.1672385326Z tomnight tue+sunset'.split()
+    inps_end = 'sunrise sunset sunset+1h +1h +2.5h None'.split() + ['']
+    
+     -->
+    <!-- <h3 class="my-4">JupyRunner Experiment Data Plotting</h3> -->
+
+    <div class="container">
+        <div class="row">
+            <div class="col" id="intr-newex-container">
+                <div class="row" style="border-radius: 5px; border: 1px black solid; margin-left: 15px; margin: 10px; padding: 5px;">
+                    <div class="input-group input-group-sm mb-1">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text" style="min-width: 180px;"><b>script_in_path</b></span>
+                        </div>
+                        <select class="custom-select" id="intr-inp-newex-pthin">
+
+                        </select>
+                    </div>
+
+                    <div class="input-group input-group-sm mb-1">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text" style="min-width: 180px;"><b>start_condition</b></span>
+                            <button class="btn btn-outline-secondary" type="button" id="intr-btn-newex-startcon-now">NOW</button>
+                        </div>
+                        <input type="datetime-local" class="form-control" placeholder="" id="intr-inp-newex-startcon" value="" >
+                        <div class="input-group-prepend">
+                            <span class="input-group-text" style="min-width: 180px;"><b>end_condition</b></span>
+                            <button class="btn btn-outline-secondary" type="button" id="intr-btn-newex-endcon-now">NOW</button>
+                        </div>
+                        <input type="datetime-local" class="form-control" placeholder="" id="intr-inp-newex-endcon" value="" >
+                    </div>
+                    
+
+                    <div class="input-group input-group-sm mb-1">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text" style="min-width: 180px;"><b>device_id</b></span>
+                        </div>
+                        <select class="custom-select" id="intr-inp-newex-device" aria-placeholder="e.G: RxS001">
+
+                        </select>
+                    </div>
+
+                    <!-- <input type="datetime-local"> -->
+                        
+                    <label for="intr-inp-get-exp-params"></label>
+                    <div class="input-group input-group-sm mb-1">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text" style="min-width: 180px;"><b>parameters_script_json</b></span>
+                        </div>
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">Enter below or get params from a previous script by script_id:</span>
+                        </div>
+                        <input type="number" class="form-control" placeholder="" id="intr-inp-get-exp-params" value="" min="0" step="1">
+                        <div class="input-group-prepend">
+                            <button class="btn btn-outline-secondary" type="button" id="intr-btn-getlast-exp-params" style="min-width: 80px;">GETLAST ID</button>
+                            <button class="btn btn-outline-secondary" type="button" id="intr-btn-get-exp-params" style="min-width: 80px;">GET PARAMS</button>
+                        </div>
+
+                    </div>
+
+                    <div class="input-group input-group-sm mb-3">
+                        <textarea class="form-control" id="intr-inp-newex-params" rows="25" placeholder="{experiment_ids: [171, 172]}" style="font-family: 'Courier New', Courier, monospace; font-size: smaller;"></textarea>
+                    </div>
+
+
+                    <div class="input-group input-group-sm mb-3">
+                        <button class="btn btn-secondary ml-2" type="button" id="intr-btn-globals-reload" style="min-width: 80px;">RELOAD</button>
+                        <button class="btn btn-info ml-2" type="button" id="intr-btn-newex-precheck" style="min-width: 80px;">CHECK</button>
+                        <button class="btn btn-warning ml-2" type="button" id="intr-btn-newex-commit-provider" style="min-width: 80px;">COMMIT</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col">
+                <div class="row">
+                    <h5>Result-Info-Log:</h5>
+                </div>
+                <div class="row">
+                    <ul class="" id="alert-list-group" style="background-color: transparent;"> 
+                        <!-- <div id="myAlert" class="alert alert-secondary" role="alert">
+                            Nothing done yet!
+                        </div> -->
+                    </ul>
+                </div>
+            </div>
+            <div class="col">
+                <div class="row">
+                    <h5>Result-JSON:</h5>
+                </div>
+                <div class="row" style="margin: 10px; border-radius: 5px; border-color: black; border-width: 1px;border-style: solid; ">
+                    <pre style="padding: 5px;">
+                        <code id="resultJson">
+                        </code>
+                    </pre> 
+                </div>
+            </div>
+        </div>
+    </div>
+    
+
+    
+
+    <script type="text/javascript">
+
+        
+        var files_repo_dc = {};
+        function getFirstNAndCount(a, n) {
+            const array = new Array(a);
+            if (array.length <= n) {
+                return array;
+            } else {
+                return array.slice(0, n).concat({ text: `... ${array.length - n} more elements` });
+            }
+        }
+
+        function addHours(date, hours) {
+            const hoursToAdd = hours * 60 * 60 * 1000;
+            date.setTime(date.getTime() + hoursToAdd);
+            return date;
+        }
+
+        function addOptionsToSelect(selectId, optionsList, valueList) {
+            for (let i = 0; i < optionsList.length; i++) {
+                $(`#${selectId}`).append('<option value="'+valueList[i]+'">'+optionsList[i]+'</option>');
+            }
+        }
+
+        async function queryAPI(endpoint, kwargs) {
+            var url = endpoint;
+            if (kwargs) {
+                const urlParams = new URLSearchParams(kwargs);
+                url = `${endpoint}?${urlParams}`;
+            }
+
+            console.log(`querying ${url}`);
+
+            try {
+                const response = await fetch(url);
+                if (!response.ok) {
+                    throw `response for ${url} is not OK!`;
+                }
+                const data = await response.json();
+                return data;
+            } catch (error) {
+                console.error('Error fetching data:', error);
+                throw error; 
+            }
+        }
+
+        async function getParams(script_in_path) {
+            return await queryAPI('/repo/get/params', {script_name:script_in_path});
+        }
+
+        async function getRepo(){
+            return await queryAPI('/repo/get/all');
+        // files_repo = list(set(list(files_repo_dc.keys())))
+        }
+
+        async function getDeviceIds(){
+            return await queryAPI('/qry/ids/device');
+        // files_repo = list(set(list(files_repo_dc.keys())))
+        }
+
+        async function getParamsFromOtherEid(params_prev, sid_proto) {
+            // Remove leading and trailing whitespace from each line and join them
+            params_prev = params_prev.split('\n').map(s => s.trim()).join('');
+
+            // Remove trailing ",}" if present
+            if (params_prev.endsWith(',}')) {
+                params_prev = params_prev.slice(0, -2) + '}';
+            }
+
+            const p = params_prev ? params_prev : '{}';
+            // Parse JSON string into JavaScript object
+            const dc_params = JSON.parse(p);
+
+            // If eid_prototype is provided, fetch the prototype and merge parameters
+            if (sid_proto) {
+                exp = await queryAPI(`/script/${sid_proto}`);
+                console.log(exp);
+                const params_dc_proto = JSON.parse(exp['script_params_json']);
+                for (const k in dc_params) {
+                    if (k in params_dc_proto) {
+                        dc_params[k] = params_dc_proto[k];
+                    }
+                }
+                setResults(`merged results from ID=${sid_proto}`, 'info', {dc_params, exp, params_dc_proto});
+            }
+
+
+            return dc_params;
+        }
+
+        const dismissButton = '<button type="button" class="close" data-dismiss="alert" aria-label="Close" style="max-height: 8px;"><span aria-hidden="true">&times;</span></button>';
+        var iAlert = 0;
+        function setAlert(s, col) {
+
+                    
+            const alertListGroup = document.getElementById('alert-list-group');
+            const alertCount = alertListGroup.children.length;
+
+            iAlert += 1;
+            // Remove the oldest alert if there are more than x
+            while (alertListGroup.children.length > 5) {
+                alertListGroup.removeChild(alertListGroup.firstChild);
+            }
+
+            const alertElement = document.createElement('div');
+            alertElement.classList.add('alert', `alert-${col}`, 'alert-dismissible', 'fade', 'show');
+            alertElement.role = 'alert';
+            alertElement.textContent = iAlert + ' | ' + new Date().toISOString() + ' | ' + s;
+            alertElement.style.margin="2px"
+            // alertElement.style.maxHeight='22px'
+            alertElement.style.maxWidth='600px'
+            alertElement.style.overflowX='auto';
+
+            alertElement.innerHTML = alertElement.innerHTML + dismissButton;
+
+            // alertElement.appendChild(dismissButton);
+            alertListGroup.appendChild(alertElement);
+
+            // document.getElementById('myAlert').className = `alert  alert-${col}`;
+            // $('.alert').text(s2 + new Date().toISOString() + ' | ' + s)
+
+        }  
+
+        function setResults(message, color='info', json=null) {
+            if (color === 'danger') {
+                console.error(message);
+                console.error(json);
+            } else {
+                console.log(message);
+                console.log(json);
+            }
+
+            setAlert(message, color);
+            // document.getElementById('resultText').innerText = new Date().toISOString() + ' | ' + message;
+            // document.getElementById('resultText').style.color = color;
+            if (json === null) {
+                document.getElementById('resultJson').innerText = '';
+            } else if (json instanceof Error ) {
+                document.getElementById('resultJson').innerText = json;
+                document.getElementById('resultJson').style.color = color;
+            } else {
+                const sjson = typeof json === 'string' ? json : JSON.stringify(json, null, 2);
+                document.getElementById('resultJson').innerText = sjson.trim();
+                document.getElementById('resultJson').style.color = color;
+            }
+        }
+        function testParamsJson() {
+            try {
+                const sp = document.getElementById('intr-inp-newex-params').value;
+                if (sp) {
+                    const params = JSON.parse(document.getElementById('intr-inp-newex-params').value);    
+                } 
+                
+            } catch (error) {
+                s = 'The given input for "parameters_script_json" is not in valid json format!';
+                alert(s);
+                throw s
+            }
+        }
+
+        async function upload(test_only) {
+            var kwargs = {};
+            var url = 'empty';
+
+            testParamsJson();
+
+            try { 
+                
+                const sp = document.getElementById('intr-inp-newex-params').value;
+
+                const start_condition = document.getElementById('intr-inp-newex-startcon').value;
+                const end_condition = document.getElementById('intr-inp-newex-endcon').value;
+                const params = JSON.parse(sp ? sp : '{}');  
+                const script_in_path = document.getElementById('intr-inp-newex-pthin').value;
+                const device_id = document.getElementById('intr-inp-newex-device').value;
+
+                kwargs = {'script_in_path': script_in_path}
+
+                if (device_id) {
+                    kwargs['device_id'] = device_id;
+                }
+                if (start_condition) {
+                    kwargs['start_condition'] = start_condition;
+                }
+                if (end_condition) {
+                    kwargs['end_condition'] = end_condition;
+                }
+                if (params) {
+                    kwargs['script_params_json'] = params;
+                }
+                
+                url = test_only ? '/action/script/pre_test' : '/action/script/run'
+
+                // Prepare the PATCH request
+                fetch(url, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(kwargs)
+                })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Network response was not ok: ' + response.status + ' | ' + response.text());
+                    }
+                    return response.json()
+                })
+                .then(result => {
+                    let s = `${test_only ? 'tested': 'uploaded'} given input. Results:`;
+                    setResults(s, 'info');
+                    setResults(result.info,  result.color, result);
+                })
+                .catch(error => {
+                    let s = `ERROR while ${test_only ? 'testing': 'uploading'} given input: ${error}`;
+                    setResults(s,  'danger', {success:false, test_only, kwargs, error, url, result:null});
+                });
+
+            } catch (error) {
+                let s = `ERROR while ${test_only ? 'testing': 'uploading'}`;
+                setResults(s,  'danger', {success:false, test_only, kwargs, error, url, result:null});
+            }
+        
+        }
+
+
+        async function reload_globals() {
+            try {
+                files_repo_dc = await getRepo();
+                var files_repo = Object.keys(files_repo_dc);
+                document.getElementById('intr-inp-newex-pthin').innerHTML = '';
+                addOptionsToSelect('intr-inp-newex-pthin', files_repo, files_repo);
+                
+                var deviceIds = await getDeviceIds();
+                document.getElementById('intr-inp-newex-device').innerHTML = '';
+                addOptionsToSelect('intr-inp-newex-device', deviceIds, deviceIds);
+                
+                const script_in_path = document.getElementById('intr-inp-newex-pthin').value;
+                const params = await getParams(script_in_path);
+                document.getElementById('intr-inp-newex-params').value = JSON.stringify(params, null, 2);
+
+                let s = `successfully updated globals!`;
+                setResults(s,  'success', {'action': 'reload_globals', 'status': 'success', 'result': {files_repo: getFirstNAndCount(files_repo, 10)}, device_ids: getFirstNAndCount(deviceIds, 10)});
+            } catch (error) {
+                let s = `ERROR while reload_globals`;
+                setResults(s,  'danger', error);
+            }
+        }
+
+        document.getElementById('intr-inp-newex-pthin').addEventListener('change', async () => {
+            try {
+                const script_in_path = document.getElementById('intr-inp-newex-pthin').value;
+                const params = await getParams(script_in_path);
+                const s = JSON.stringify(params, null, 2);
+                document.getElementById('intr-inp-newex-params').value = s;
+                // document.getElementById('intr-inp-newex-params').rows = s.split(/\r\n|\r|\n/).length;
+                setResults(`updated params from "${script_in_path}"`,  'info', params);
+            } catch (error) {
+                let s = `ERROR while getting params!`;
+                setResults(s,  'danger', error);
+            }
+        });
+
+        document.getElementById('intr-btn-get-exp-params').addEventListener('click', async () => {
+            try {
+                const params_prev = document.getElementById('intr-inp-newex-params').value;
+                const eid_prototype = document.getElementById('intr-inp-get-exp-params').value;
+                const params = await getParamsFromOtherEid(params_prev, eid_prototype);
+                const s = JSON.stringify(params, null, 2);
+                document.getElementById('intr-inp-newex-params').value = s;
+                // document.getElementById('intr-inp-newex-params').rows = s.split(/\r\n|\r|\n/).length;
+                setResults(`updated params from ID="${eid_prototype}"`,  'info', params);
+            } catch (error) {
+                let s = `ERROR while getting params from other experiment`;
+                setResults(s,  'danger', error);
+            }
+        });
+
+        document.getElementById('intr-btn-globals-reload').addEventListener('click', async () => {
+            reload_globals();
+        });
+
+        document.getElementById('intr-btn-getlast-exp-params').addEventListener('click', async () => {
+            try {
+                const pth_in = document.getElementById('intr-inp-newex-pthin').value;
+                var p = pth_in.replace(/^.*[\\/]/, '')
+                const where_s = `script_in_path LIKE '%${p}%' ORDER BY start_condition DESC`;
+                const input_kwargs = {script_in_path:p, limit:1}
+                const results = await queryAPI('/qry/script', input_kwargs);
+                const result_element = results.length > 0 ? results[0] : null;
+                const ID = result_element != null ? result_element.id : '';
+                document.getElementById('intr-inp-get-exp-params').value = ID;
+                setResults(`got parameters from last script ID="${ID}"`, 'info', {result_element, results, input_kwargs});
+            } catch (error) {
+                let s = `ERROR while getting params from other experiment`;
+                setResults(s,  'danger', error);
+            }
+        });
+
+        document.getElementById('intr-btn-newex-precheck').addEventListener('click', async () => {            
+            await upload(1);
+        });
+
+        document.getElementById('intr-btn-newex-commit-provider').addEventListener('click', async () => {
+            // alert('WIP!');
+            await upload(0);
+        });
+
+        document.getElementById('intr-btn-newex-startcon-now').addEventListener('click', async () => {
+            document.getElementById('intr-inp-newex-startcon').value = Date().toISOString();
+        });
+        
+        document.getElementById('intr-btn-newex-endcon-now').addEventListener('click', async () => {
+            document.getElementById('intr-inp-newex-endcon').value = Date().toISOString();
+        });
+
+        reload_globals();
+
+        // document.getElementById('intr-inp-newex-startcon').value = new Date().toISOString().slice(0, 16);
+        // document.getElementById('intr-inp-newex-endcon').value = (addHours(new Date(), 1)).toISOString().slice(0, 16);
+
+
+    </script>
+{% endblock %}
