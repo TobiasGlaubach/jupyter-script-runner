@@ -67,6 +67,26 @@ def get_params(dc, as_dict=True, to_skip = 'dbserver_uri script_id experiment_id
     if isinstance(to_skip, str):
         to_skip = to_skip.split()
         
+    if as_dict:
+        if len(dc) == 1 and 'ERROR' in dc:
+            return dc
+        
+        
+        ret = {}
+        for k, v in dc.items():
+            try:
+                vv = ast.literal_eval(v['default'])
+            except Exception as err:
+                vv = {
+                    'info': 'evaluating the input paramater string failed!',
+                    'variable_name': v['name'],
+                    'res':'ERROR', 
+                    'cause': 'ast.literal_eval failed!',
+                    'eval_str': v['default'],
+                    'hint': 'The string or node provided for parameters must be self contained and only consist of the following Python literal structures: strings, bytes, numbers, tuples, lists, dicts, sets, booleans, and None'
+                }
+            ret[v['name']] = vv
+        return ret
 
     def parse_default(s):
         try:
@@ -93,7 +113,7 @@ def get_params(dc, as_dict=True, to_skip = 'dbserver_uri script_id experiment_id
     txt += '\n}'
     r_json = txt
     
-    return json.loads(r_json) if as_dict else r_json
+    return r_json
 
 
 
