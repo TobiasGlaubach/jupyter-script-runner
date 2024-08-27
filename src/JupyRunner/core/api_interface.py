@@ -92,7 +92,7 @@ class ScriptClient(ModelClient):
                 script_version:str='',
                 out_path:str='',
                 n_max:int=-1, skipn:int=0, 
-                ):
+                ) -> list[schema.Script]:
         kwargs = {
             "t_min": t_min,
             "t_max": t_max,
@@ -109,7 +109,7 @@ class ScriptClient(ModelClient):
         response.raise_for_status() 
         return response.json()
     
-    
+
 class DeviceClient(ModelClient):
     def __init__(self, base_url: str = None):
         super().__init__(schema.Device, base_url=base_url)
