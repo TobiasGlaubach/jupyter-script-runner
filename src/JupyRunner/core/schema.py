@@ -209,6 +209,7 @@ class Script(SQLModel, table=True):
     
 
     def set_script_out_path(self, force_overwrite=False):
+        # BUG: There is some form of bug here with the default script dir folder, but it seems to be working for now (somehow)!
 
         if self.script_out_path and not force_overwrite:
             return self.script_out_path
@@ -217,7 +218,7 @@ class Script(SQLModel, table=True):
         assert self.time_started, 'can not set out_path, because the script has no "time_started" yet!'
 
         filename = os.path.basename(self.script_in_path)
-        name, extension = os.path.splitext(filename)
+        name, extension = os.path.splitext(filename) # BUG: I suspect this line. needs debugging
 
         if name.startswith('script_'): name = name[len('script_'):]
         if name.startswith('exp_'): name = name[len('exp_'):]
