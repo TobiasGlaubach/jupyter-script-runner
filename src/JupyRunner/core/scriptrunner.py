@@ -14,6 +14,7 @@ import traceback
 
 config = None
 url = None
+full_api = None
 
 def send_mattermost_failed(script:Script, err: Exception):
     s = ''
@@ -26,13 +27,13 @@ def send_mattermost_status(script:Script):
     send_mattermost(f'{script.id=} {script.status=}')
 
 def setup(cnfg):
-    global config, api
+    global config, api, full_api
     config = cnfg
     url = config['globals']['url']
     api = api_interface.ScriptClient(url)
+    full_api = api_interface.APIClient(url)
 
-
-def load(cnfg):
+def start(cnfg):
     global config
     config = cnfg
 
@@ -113,7 +114,7 @@ def run_script(script_id:int):
 
     try:
         script = get(script_id)
-        
+
         script, all_params = _pre(script, is_test=False)
         
         send_mattermost(f'Script {script.id}: RUNNING with:  {script.script_in_path} (VER:{script.script_version}) -> {script.script_out_path}')
