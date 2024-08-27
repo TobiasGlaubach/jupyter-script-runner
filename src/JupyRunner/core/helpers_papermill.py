@@ -86,6 +86,9 @@ def get_params(dc, as_dict=True, to_skip = 'dbserver_uri script_id experiment_id
                     'hint': 'The string or node provided for parameters must be self contained and only consist of the following Python literal structures: strings, bytes, numbers, tuples, lists, dicts, sets, booleans, and None'
                 }
             ret[v['name']] = vv
+
+        if not 'follow_up_script' in ret:
+            ret = {**{'follow_up_script': {'script_in_path': '', 'script_params_json': {}}}, **ret}
         return ret
 
     def parse_default(s):
@@ -152,8 +155,7 @@ def get_repo_scripts(repo_dir, ext='.ipynb'):
     Returns:
         dict of dicts: pathname for each file as key and get_info
     """
-    #config =  MeerTest.core.config.get_config()
     result = [y for x in os.walk(repo_dir) for y in glob.glob(os.path.join(x[0], '*' + ext))]
-    return {p:get_info(p) for p in result if not p.endswith('-checkpoint.ipynb')}
+    return {p.replace('\\', '/'):get_info(p) for p in result if not p.endswith('-checkpoint.ipynb')}
 
 
