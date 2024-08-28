@@ -90,9 +90,13 @@ def _pre(script:Script, is_test=False):
 
     if script.device_id:
         all_params['device'] = device_api.get(script.device_id).model_dump()
-    
-    all_params['datafiles'] = full_api.get(f'qry/script/{script.id}/datafiles')
+    else:
+        all_params['device'] = []
         
+    if script.id:
+        all_params['datafiles'] = full_api.get(f'qry/script/{script.id}/datafiles')
+    else:
+        all_params['datafiles'] = []
 
     if not is_test:
         # Create output directory if it doesn't exist
