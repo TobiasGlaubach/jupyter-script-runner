@@ -55,7 +55,7 @@ commit = runner.commit
 def get_script(script_id:int) -> schema.Script:
     if isinstance(script_id, str):
         script_id = int(script_id)
-    return api.get(schema.Script, script_id)
+    return api.get(script_id)
 
 
 
