@@ -51,3 +51,12 @@ services:
     depends_on:
       - jupyrun_db
   
+
+  jupyter:
+    image: jupyter/scipy-notebook
+    ports:
+      - "7991:8888"
+    volumes:
+      - vjupyrun_data:/home/jovyan/
+    environment:
+      JUPYTER_ENABLE_LAB: "yes"
