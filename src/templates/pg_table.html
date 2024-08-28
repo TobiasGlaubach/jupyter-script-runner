@@ -259,7 +259,10 @@ function loadata() {
                     name: 'status',
                     formatter: (cell, row) => {
                         const errors = row.cells[i_errors].data;
-                        return gridjs.html(`<strong title="ERRORS: ${errors}"><pre style="color:${get_color_from_status(cell)};"> ${cell} </pre></strong>`);
+                        const regex = /^[a-zA-Z0-9\s]+$/;
+                        const errors2 = regex.test(text) ? text : '';
+
+                        return gridjs.html(`<strong title="ERRORS: ${errors2}"><pre style="color:${get_color_from_status(cell)};"> ${cell} </pre></strong>`);
                     }
                 },
                 { 

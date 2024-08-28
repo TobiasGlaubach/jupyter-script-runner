@@ -102,7 +102,7 @@ def finish(p, id):
 def start_job(id):
 
     assert id not in processes, f'cannot start job {id=} since it is still running!'
-
+    assert id, 'need to give an id!'
     run_script_path = config['procserver']['run_script_path']
     
     cmds = [run_script_path, '--id', str(id)]

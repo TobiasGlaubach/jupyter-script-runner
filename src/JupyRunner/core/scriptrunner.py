@@ -153,7 +153,7 @@ def run_script(script_id:int):
     """
 
     try:
-        script = get(script_id)
+        script = get(int(script_id))
 
         log.info("Script %d: Starting", script.id)
         
