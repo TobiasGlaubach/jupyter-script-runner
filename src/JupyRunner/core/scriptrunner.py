@@ -18,6 +18,8 @@ url = None
 api = None
 full_api = None
 var_api = None
+dfi_api = None
+device_api = None
 
 def send_mattermost_failed(script:Script, err: Exception):
     s = ''
@@ -33,13 +35,15 @@ def setup(cnfg):
     api_interface.setup(cnfg)
     helpers_mattermost.setup(cnfg)
 
-    global config, api, full_api, var_api
+    global config, api, full_api, var_api, dfi_api, device_api
     config = cnfg
 
     
     url = config['globals']['dbserver_uri']
     log.info(f'Scriptrunner initialized with {url=}')
     api = api_interface.ScriptClient(url)
+    dfi_api = api_interface.DataFileClient(url)
+    device_api = api_interface.DeviceClient(url)
     var_api = api_interface.ProjectVariableClient(url)
     full_api = api_interface.APIClient(url)
 
