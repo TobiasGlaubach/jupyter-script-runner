@@ -287,7 +287,7 @@ def startup_testrun():
     p = '/home/jovyan/99_startup_testscript.ipynb'
     assert os.path.exists(p), 'startup testscript is missing! >> '  + p
 
-    startup_script = runner.api.post('/action/script/run', json={'script_in_path ': p, 'device_id': 'dummy_device'})
+    startup_script = runner.api.post({'script_in_path ': p, 'device_id': 'dummy_device'})
     assert startup_script, 'error starting a testscript!'
 
 
