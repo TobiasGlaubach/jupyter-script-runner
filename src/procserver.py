@@ -23,7 +23,7 @@ if __name__ == '__main__':
 from JupyRunner.core import schema
 from JupyRunner.core import scriptrunner as runner
 
-from JupyRunner.core.helpers import get_utcnow, make_zulustr, parse_zulutime, log
+from JupyRunner.core.helpers import get_utcnow, make_zulustr, parse_zulutime, log, set_loglevel
 from JupyRunner.core.helpers_mattermost import send_mattermost
 
 
@@ -42,6 +42,8 @@ for module in modules:
 
 for module in modules:
     module.start(config)
+
+set_loglevel(config)
 
 
 api = runner.api
@@ -277,18 +279,18 @@ def tick():
     log.debug(f'tick... DONE')
 
 def update_ticker(t_sleep):
-    procserver_info = runner.full_api.get(schema.ProjectVariable, 'procserver_info')
+    procserver_info = runner.var_api.get('procserver_info')
     if procserver_info is None:
-        procserver_info = schema.ProjectVariable(id='procserver_info', data_json={'t_last': '', 't_expected_next': '', 'running_processes': []})
+        log.info('FIRST TICK EVER!')
+        procserver_info = schema.ProjectVariable(id='procserver_info', data_json={'t_last': None, 't_expected_next': '', 'running_processes': []})
     
 
     t_last = get_utcnow()
-    procserver_info.data_json['t_last'] = t_last
-    procserver_info.data_json['t_expected_next'] = t_last + datetime.timedelta(t_sleep)
+    procserver_info.data_json['t_last'] = make_zulustr(t_last)
+    procserver_info.data_json['t_expected_next'] = make_zulustr(t_last + datetime.timedelta(t_sleep))
     procserver_info.data_json['running_processes'] = [dict(script_id=k, pid=v.pid) for k, v in processes.items()]
     
-
-    commit(procserver_info)
+    runner.var_api.put(procserver_info)
 
 
 def run():
@@ -296,6 +298,14 @@ def run():
     t_sleep = config.get('procserver', {}).get('t_interval', 60)
     
     i = 0
+    t = t_sleep/2
+    log.info(f'procserver waiting {t=} sec before starting...')
+    time.sleep(t) # to have the DB up and running
+    log.info(f'pinging server at "{api.base_url}"...')
+
+    assert runner.api_interface.ping(), f'pinging {runner.api_interface.url=} failed!'
+    log.info('ping OK!')
+
     while(1):
         try:
             if i % 100 == 0:
@@ -303,6 +313,7 @@ def run():
                 update_ticker(t_sleep)
 
             tick()
+            i += 1
 
         except Exception as err:
             log.error(err)

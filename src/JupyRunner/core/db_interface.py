@@ -129,6 +129,14 @@ def commit(obj):
         else:
             # Add new model
             obj.last_time_changed = helpers.get_utcnow()
+            proto = type(obj)()
+
+            for key, v in obj.model_dump().items():
+                if not hasattr(obj, key):
+                    raise KeyError(f'the object {obj} does not have the property {key=}, which supposed to be set')
+                vv = _update_factory(key, getattr(proto, key), getattr(obj, key))
+                setattr(obj, key, vv)
+
             session.add(obj)
             session.commit()
             

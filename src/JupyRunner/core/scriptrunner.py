@@ -9,32 +9,44 @@ import os
 from JupyRunner.core import schema, api_interface
 from JupyRunner.core.schema import Script, STATUS
 from JupyRunner.core.helpers import log, get_utcnow, make_zulustr, now_iso
-from JupyRunner.core.helpers_mattermost import send_mattermost
+from JupyRunner.core import helpers_mattermost
 
 import traceback
 
 config = None
 url = None
+api = None
 full_api = None
+var_api = None
 
 def send_mattermost_failed(script:Script, err: Exception):
     s = ''
     s += f'\nFAILED on post processing for script {script.id=} and {script.script_out_path=}'
     s += f'\nError Message: ```{str(err)}```'
     s += f'\nSTATUS NEW: **FAILED**'
-    send_mattermost(s)
+    helpers_mattermost.send_mattermost(s)
 
 def send_mattermost_status(script:Script):
-    send_mattermost(f'{script.id=} {script.status=}')
+    helpers_mattermost.send_mattermost(f'{script.id=} {script.status=}')
 
 def setup(cnfg):
-    global config, api, full_api
+    api_interface.setup(cnfg)
+    helpers_mattermost.setup(cnfg)
+
+    global config, api, full_api, var_api
     config = cnfg
+
+    
     url = config['globals']['dbserver_uri']
+    log.info(f'Scriptrunner initialized with {url=}')
     api = api_interface.ScriptClient(url)
+    var_api = api_interface.ProjectVariableClient(url)
     full_api = api_interface.APIClient(url)
 
 def start(cnfg):
+    api_interface.start(cnfg)
+    helpers_mattermost.start(cnfg)
+
     global config
     config = cnfg
 
@@ -136,7 +148,7 @@ def run_script(script_id:int):
         log.info("Script %d: Running", script.id)
         script = set_prop_remote(script, status = STATUS.RUNNING, time_started = get_utcnow())
 
-        send_mattermost(f'Script {script.id}: RUNNING with:  {script.script_in_path} (VER:{script.script_version}) -> {script.script_out_path}')
+        helpers_mattermost.send_mattermost(f'Script {script.id}: RUNNING with:  {script.script_in_path} (VER:{script.script_version}) -> {script.script_out_path}')
         # Run the script using Papermill
         nb = papermill.execute_notebook(
             script.script_in_path,
@@ -176,7 +188,7 @@ def run_script(script_id:int):
             script.script_out_path = script.script_out_path.replace(".ipynb", ".html")
             s = f"Script {script.id}: Finished successfully on {make_zulustr(script.time_finished)}"
             log.info(s)
-            send_mattermost(s)
+            helpers_mattermost.send_mattermost(s)
 
         script = commit(script)
 

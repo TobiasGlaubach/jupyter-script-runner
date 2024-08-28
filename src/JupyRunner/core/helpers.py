@@ -1,8 +1,8 @@
-import re
+import re, os
 import dateutil.parser, datetime, time, logging, sys
 
 
-log_level = logging.DEBUG
+log_level = logging.INFO
 
 
 log = logging.getLogger()
@@ -10,13 +10,19 @@ log = logging.getLogger()
 logging.getLogger('sqlalchemy.engine').setLevel(logging.WARNING)
 
 formatter = logging.Formatter("[ %(levelname)s - %(asctime)s - %(name)s - %(filename)s:%(lineno)s] %(message)s", datefmt='%Y-%m-%d %H:%M:%S%z')
-log.setLevel(logging.DEBUG)
+log.setLevel(log_level)
 streamHandler = logging.StreamHandler(sys.stdout)
 streamHandler.setLevel(log_level)  # Set the stream handler level to DEBUG
 streamHandler.setFormatter(formatter)
 log.addHandler(streamHandler)
 
+def get_loglevel(config):
+    return config.get('globals', {}).get('loglevel', os.environ.get('loglevel', log_level))
 
+def set_loglevel(config):
+    lvl = get_loglevel(config)
+    log.setLevel(lvl)
+    return lvl
 
 def tomorrow_iso(remove_ms = True):
     return make_zulustr(get_utcnow() + datetime.timedelta(hours=24), remove_ms=remove_ms)

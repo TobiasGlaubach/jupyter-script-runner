@@ -18,6 +18,7 @@ def setup(cnfg):
     global config, url, client
     config = cnfg
     url = config['globals']['dbserver_uri']
+    log.info(f'HTTP API initialized with {url=}')
     client = APIClient(url)    
 
 def start(cnfg):
@@ -26,12 +27,22 @@ def start(cnfg):
 
 # def set_prop_remote(script: schema.Script):
 
+def ping(_url = None):
+    
+    _url = url if not _url else _url
+    assert _url, 'no URL given for ping!'
+    _url = f"{_url.rstrip('/')}/ping"
+    log.debug(f'GET: {_url}')
+
+    response = requests.get(url)
+    response.raise_for_status() 
+    return response.text
 
 
 class APIClient:
-    def __init__(self, base_url:str=None):
+    def __init__(self, base_url:str=None, none_on_404 = False):
         self.base_url = url if base_url is None else base_url
-        
+        self.none_on_404 = none_on_404
     
     def _url(self, endpoint):
         return f"{self.base_url.rstrip('/')}/{str(endpoint).lstrip('/')}".rstrip('/')
@@ -64,10 +75,15 @@ class APIClient:
                 assert inp[key] == outp[key], f'{key=} was not updated! {inp[key]=} != {outp[key]=}'
         return outp
     
+
+        
     def get(self, endpoint, params=None):
         url = self._url(endpoint)
         log.debug(f'GET: {url} {params=}')
-        response = requests.get(url, params=params)
+        response = requests.get(url, params=params) if params else requests.get(url)
+        if response.status_code == 404 and self.none_on_404:
+            return None
+        
         response.raise_for_status() 
         return response.json()
         
@@ -108,6 +124,7 @@ class ModelClient(APIClient):
         self.cls = cls
         self.clss = cls.__tablename__
         self._base_url = url if base_url is None else base_url
+        self.none_on_404 = True
 
     @property
     def route(self):
@@ -118,8 +135,9 @@ class ModelClient(APIClient):
         return f'{self._base_url}/{self.route}'
     
     def get(self, object_id):
-        return self.cls.model_validate(super().get(str(object_id)))
-    
+        o = super().get(str(object_id))
+        return None if o is None else self.cls.model_validate(o)
+        
     def get_all(self):
         return [self.cls(**kwargs) for kwargs in super().get('')]
     

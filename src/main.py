@@ -5,7 +5,7 @@ import os
 import subprocess
 import time
 import traceback
-from typing import Any, Dict, List
+from typing import Any, Callable, Dict, List
 import nbconvert
 
 from fastapi import FastAPI, Form, HTTPException, Path, Query, Request, Response, UploadFile, File
@@ -36,6 +36,7 @@ static_dir = ''
 with open('config.yaml', 'r') as fp:
     config = yaml.safe_load(fp)
 
+helpers.set_loglevel(config)
 
 modules = [dbi, filesys_storage_api]
 serializers = {
@@ -74,6 +75,17 @@ app.mount("/repos", StaticFiles(directory=filesys_storage_api.default_dir_repo),
 #         v.destruct()
 
 #     log.info('END!')
+
+
+@app.middleware("http")
+async def log_requests(request: Request, call_next: Callable) -> Response:
+    log.debug(f"Received request: {request.method} {request.url}")
+
+    response = await call_next(request)
+
+    log.debug(f"Sent response: {response.status_code} {response.headers}")
+
+    return response
 
 
 def get_session():
@@ -312,8 +324,10 @@ def post_var(obj: schema.ProjectVariable):
 
 @app.get("/projectvariable/{var_id}", response_model=schema.ProjectVariable)
 def get_var(var_id:str):
-    return dbi.get(schema.ProjectVariable, var_id)
-
+    obj = dbi.get(schema.ProjectVariable, var_id)
+    if not obj:
+        raise HTTPException(status_code=404, detail="datafile not found")
+    return 
 
 @app.get("/projectvariable")
 def get_var():

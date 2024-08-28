@@ -17,15 +17,21 @@ from JupyRunner.core import schema, api_interface, helpers, scriptrunner
 
 log = helpers.log
 
+
+
 def run(script_id):
     tstart = helpers.get_utcnow()
 
     PID = os.getpid()
-    log.info(f'run_script with {PID=} and {script_id=} is starting')
+    
 
     with open('config.yaml', 'r') as fp:
         config = yaml.safe_load(fp)
 
+    helpers.set_loglevel(config)
+
+    log.info(f'run_script with {PID=} and {script_id=} is starting')
+    
     api_interface.setup(config)
     script = scriptrunner.run_script(script_id)
     scriptrunner.init_follow_up_script(script)
