@@ -6,7 +6,7 @@ the processing core to run jupyter notebooks in papermill
 
 import datetime
 import subprocess
-
+import shutil
 import sys, os
 import time
 import traceback
@@ -286,6 +286,8 @@ def startup_testrun():
 
     p = '/home/jovyan/99_startup_testscript.ipynb'
     assert os.path.exists(p), 'startup testscript is missing! >> '  + p
+    new_path = filesys_storage_api.default_dir_repo + '/' + os.path.basename(p)
+    shutil.move(p, new_path)
 
     startup_script = runner.api.post({'script_in_path ': p, 'device_id': 'dummy_device'})
     assert startup_script, 'error starting a testscript!'
