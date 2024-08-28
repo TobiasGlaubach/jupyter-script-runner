@@ -20,7 +20,7 @@ if __name__ == '__main__':
     parent_dir = os.path.dirname(os.path.dirname(current_dir))
     sys.path.insert(0, parent_dir)
 
-from JupyRunner.core import schema
+from JupyRunner.core import schema, filesys_storage_api
 from JupyRunner.core import scriptrunner as runner
 
 from JupyRunner.core.helpers import get_utcnow, make_zulustr, parse_zulutime, log, set_loglevel
@@ -36,7 +36,7 @@ processes = {}
 with open('config.yaml', 'r') as fp:
     config = yaml.safe_load(fp)
 
-modules = [runner]
+modules = [runner, filesys_storage_api]
 for module in modules:
     module.setup(config)
 
@@ -278,6 +278,17 @@ def tick():
     tick_start()
     log.debug(f'tick... DONE')
 
+def startup_info():
+    procserver_info = runner.var_api.get('procserver_startinfo')
+    data = {'filesys': filesys_storage_api.get_folderinfo(), 't_started': make_zulustr(get_utcnow())}
+
+    if procserver_info is None:
+        procserver_info = schema.ProjectVariable(id='procserver_startinfo', data_json={})
+
+    procserver_info.data_json = data
+    runner.var_api.put(procserver_info)
+
+
 def update_ticker(t_sleep):
     procserver_info = runner.var_api.get('procserver_info')
     if procserver_info is None:
@@ -305,6 +316,8 @@ def run():
 
     assert runner.api_interface.ping(), f'pinging {runner.api_interface.url=} failed!'
     log.info('ping OK!')
+
+    startup_info()
 
     while(1):
         try:

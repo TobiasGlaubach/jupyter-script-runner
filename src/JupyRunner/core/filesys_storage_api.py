@@ -222,3 +222,14 @@ def get_script_save_dir(dtime:datetime.datetime, experiment_id:int, device_id:st
     return fulldir
 
 
+def get_folderinfo():
+    global default_dir_data, default_dir_repo
+    
+    folders = {}
+    for k, p in {'data': default_dir_data, 'repo': default_dir_repo}.items():
+        folders[k] = {
+            'path': p,
+            'exists': os.path.exists(p),
+            'can_write': helpers.can_write(p),
+        }
+    return folders
