@@ -341,7 +341,7 @@ def get_var(var_id:str):
 
 @app.get("/projectvariable")
 def get_var():
-    return dbi.get_all()
+    return dbi.get_all(schema.ProjectVariable)
 
 
 
