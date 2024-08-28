@@ -19,6 +19,7 @@ USER 1000:100
 
 ADD ./src /home/jovyan
 
+RUN ls -n 
 # Expose the port your FastAPI app is listening on (e.g., 8080)
 EXPOSE 8080
 
