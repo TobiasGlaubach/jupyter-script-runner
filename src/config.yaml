@@ -2,9 +2,9 @@ db:
   filepath: '/home/jovyan/db/jupyrun_data.db'
 
 globals:
-  dbserver_uri: 'http://localhost:8000'
+  dbserver_uri: 'http://localhost:7990'
   mattermost_uri: ''
-
+  loglevel: INFO
 
 pathes:
   default_dir_meas: '/home/jovyan/shared/meas/'
@@ -13,6 +13,6 @@ pathes:
 procserver:
   do_direct_running: 0
   terminate_timeout_sec: 5
-  t_interval: 5
+  t_interval: 15
   run_script_path: run_script
   pythonpath_for_win: 'python'
