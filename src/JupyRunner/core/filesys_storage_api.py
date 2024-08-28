@@ -216,6 +216,7 @@ def get_script_save_dir(dtime:datetime.datetime, experiment_id:int, device_id:st
     tag = ('_' + tag.strip().replace(' ', '')) if tag else ''
     subdir = f"{device_id}/{time}_{experiment_id}_{device_id}_s_{experiment_name}{tag}"
     fulldir = join(default_dir_data, subdir)
+    log.debug(f'{fulldir=}')
     if make_dir:
         mkdir(fulldir, raise_ex=True)
     return fulldir

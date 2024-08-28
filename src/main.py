@@ -144,16 +144,26 @@ def ping():
     <ul>
         <li><a href="/ui/home">Open Main UI</a></li>    
         <li><a href="/docs">Open API documentation (swagger like webpage)</a></li>    
+        <li>db:
+            <ul>
+                <li>path: {dbi.sqlite_file_name}</li>
+                <li>exists: {os.path.exists(dbi.sqlite_file_name)}</li>
+                <li>can_write: {helpers.can_write(dbi.sqlite_file_name)}</li>
+                <li>can_write (dir): {helpers.can_write(os.path.dirname(dbi.sqlite_file_name))}</li>
+            </ul>
+        </li>
         <li>default_dir_data:
             <ul>
                 <li>path: <a href="/files/data">{filesys_storage_api.default_dir_data}</a></li>
-                <li>exists: {os.path.exists(filesys_storage_api.default_dir_data)}</a></li>
+                <li>exists: {os.path.exists(filesys_storage_api.default_dir_data)}</li>
+                <li>can_write: {helpers.can_write(filesys_storage_api.default_dir_data)}</li>
             </ul>
         </li>
         <li>default_dir_repo:
             <ul>
                 <li>path: <a href="/files/repo">{filesys_storage_api.default_dir_repo}</a></li>
                 <li>exists: {os.path.exists(filesys_storage_api.default_dir_repo)}</li>
+                <li>can_write: {helpers.can_write(filesys_storage_api.default_dir_data)}</li>
             </ul>
         </li>
         <li>{template_dir=}</li>
