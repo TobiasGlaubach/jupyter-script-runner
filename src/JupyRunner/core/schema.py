@@ -183,7 +183,7 @@ class Script(SQLModel, table=True):
         if self.default_data_dir:
             return self.default_data_dir
         else:
-            return os.path.join(self.get_script_dir(), 'data')
+            return os.path.join(self.get_script_dir(), 'data').replace('\\', '/')
     
     
     def get_script_dir(self):
