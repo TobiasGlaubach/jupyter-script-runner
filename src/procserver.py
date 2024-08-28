@@ -278,9 +278,20 @@ def tick():
     tick_start()
     log.debug(f'tick... DONE')
 
+def startup_testrun():
+    dummy_device = runner.device_api.get('dummy_device')
+    if dummy_device is None:
+        dummy_device = schema.Device(id='dummy_device', address='http://localhost:8080', connection_protocol='http', comments='a dummy device for testing')
+        dummy_device = runner.device_api.put(dummy_device)
+
+
+    startup_script = runner.api.post('/action/script/run', json={'script_in_path ': '/home/jovyan/99_startup_test.ipynb', 'device_id': 'dummy_device'})
+    assert startup_script, 'error starting a testscript!'
+
+
 def startup_info():
     procserver_info = runner.var_api.get('procserver_startinfo')
-    data = {'filesys': filesys_storage_api.get_folderinfo(), 't_started': make_zulustr(get_utcnow())}
+    data = {'filesys': filesys_storage_api.get_folderinfo(), 't_started': make_zulustr(get_utcnow()), 'cwd': os.getcwd(), '__file__': __file__}
 
     if procserver_info is None:
         procserver_info = schema.ProjectVariable(id='procserver_startinfo', data_json={})
@@ -318,6 +329,8 @@ def run():
     log.info('ping OK!')
 
     startup_info()
+    
+    startup_testrun()
 
     while(1):
         try:
