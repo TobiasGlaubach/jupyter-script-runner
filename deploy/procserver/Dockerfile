@@ -11,12 +11,10 @@ RUN pip3 --no-cache-dir install notebook papermill papermill[all] numpy matplotl
 ADD ./requirements.txt /home/jovyan/requirements.txt
 RUN pip3 install -r /home/jovyan/requirements.txt
 
-
+ADD ./src /home/jovyan
+RUN chmod -R 777 /home/jovyan
+WORKDIR /home/jovyan
 USER ${NB_UID}
 
-WORKDIR /home/jovyan
-
-ADD ./src /home/jovyan
-WORKDIR /home/jovyan
 
 CMD [ "python3", "procserver.py", "-v"]
