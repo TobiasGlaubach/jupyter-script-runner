@@ -90,6 +90,11 @@ def test_create_device_and_script():
     assert new_obj2.end_condition > new_obj2.start_condition
 
     
+def test_projectvariable_api_basic():
+    
+    a = api.ProjectVariableClient('http://localhost:7990')
+    assert a.clss == schema.ProjectVariable.__tablename__
+    assert a.cls is schema.ProjectVariable
 
 
 def test_put_script():
@@ -156,4 +161,5 @@ def test_put_script():
 
 
 if __name__ == '__main__':
+    # test_projectvariable_api_basic()
     pytest.main([__file__])

@@ -44,6 +44,11 @@ def session(engine):
     with Session(engine) as session:
         yield session
 
+def test_get_default_dir(session):
+    before = get_utcnow()
+
+    
+
 def test_create_device_and_script(session):
     before = get_utcnow()
 
