@@ -15,6 +15,8 @@ WORKDIR /home/jovyan
 
 
 ADD ./requirements.txt /home/jovyan/requirements.txt
+RUN chmod -R 777 /home/jovyan
+
 RUN pip3 install -r /home/jovyan/requirements.txt
 
 ADD ./src /home/jovyan
