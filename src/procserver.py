@@ -289,8 +289,9 @@ def startup_testrun():
     new_path = filesys_storage_api.default_dir_repo + '/' + os.path.basename(p)
     shutil.move(p, new_path)
 
-    startup_script = runner.api.post({'script_in_path ': p, 'device_id': 'dummy_device'})
+    startup_script = runner.api.post({'script_in_path': p, 'device_id': 'dummy_device'})
     assert startup_script, 'error starting a testscript!'
+
 
 
 def startup_info():
