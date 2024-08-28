@@ -317,6 +317,9 @@ def run():
 
         except Exception as err:
             log.error(err)
+            traceback.print_exception(err)
+
+            
 
         time.sleep(t_sleep)
 
