@@ -284,6 +284,7 @@ def startup_testrun():
         dummy_device = schema.Device(id='dummy_device', address='http://localhost:8080', connection_protocol='http', comments='a dummy device for testing')
         dummy_device = runner.device_api.put(dummy_device)
 
+    assert os.path.exists('/home/jovyan/99_startup_test.ipynb'), 'startup testscript is missing! >> '  + '/home/jovyan/99_startup_test.ipynb'
 
     startup_script = runner.api.post('/action/script/run', json={'script_in_path ': '/home/jovyan/99_startup_test.ipynb', 'device_id': 'dummy_device'})
     assert startup_script, 'error starting a testscript!'
