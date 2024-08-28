@@ -831,6 +831,9 @@ async def repo_get_params(script_name : str = Query(default='', description='The
     if scripts: 
         return scripts
     
+    if not script_name:
+        return []
+    
     raise HTTPException(status_code=404, detail=f"Script {script_name=} not found in repo {repo}")
 
 
