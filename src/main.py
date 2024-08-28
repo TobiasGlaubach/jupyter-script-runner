@@ -286,48 +286,48 @@ def get_datafile(datafile_id: int):  # Assuming ID is an integer for datafiles
 def create_datafile(datafile: schema.Datafile):
     return dbi.commit(datafile)
 
-@app.patch("/script/{script_id}", response_model=schema.Script)
+@app.patch("/script/{script_id}")
 async def patch_script(script_id:int, request: Request):
     return dbi.set_property(schema.Script, script_id, **(await request.json()))
     
-@app.put("/script/{script_id}", response_model=schema.Script)
+@app.put("/script/{script_id}")
 def put_script(script_id:int, script: schema.Script):
     assert script_id == script.id, f'trying to set a object with mismatching id! {script_id=} vs. {script.id=}'
     return dbi.commit(script)
 
-@app.patch("/device/{device_id}", response_model=schema.Device)
+@app.patch("/device/{device_id}")
 async def patch_device(device_id:str, request: Request):
     return dbi.set_property(schema.Device, device_id, **(await request.json()))
     
-@app.put("/device/{device_id}", response_model=schema.Device)
+@app.put("/device/{device_id}")
 def put_device(device_id:str, device: schema.Device):
     assert device_id == device.id, f'trying to set a object with mismatching id! {device_id=} vs. {device.id=}'
     return dbi.commit(device)
 
-@app.patch("/datafile/{datafile_id}", response_model=schema.Datafile)
+@app.patch("/datafile/{datafile_id}")
 async def patch_datafile(datafile_id:int, request: Request):
     return dbi.set_property(schema.Datafile, datafile_id, **(await request.json()))
     
-@app.put("/datafile/{datafile_id}", response_model=schema.Datafile)
+@app.put("/datafile/{datafile_id}")
 def put_datafile(datafile_id:int, datafile: schema.Datafile):
     assert datafile_id == datafile.id, f'trying to set a object with mismatching id! {datafile_id=} vs. {datafile.id=}'
     return dbi.commit(datafile)
 
-@app.put("/projectvariable/{var_id}", response_model=schema.ProjectVariable)
+@app.put("/projectvariable/{var_id}")
 def put_var(var_id:str, obj: schema.ProjectVariable):
     assert var_id == obj.id, f'trying to set a object with mismatching id! {var_id=} vs. {obj.id=}'
     return dbi.commit(obj)
 
-@app.post("/projectvariable", response_model=schema.ProjectVariable)
+@app.post("/projectvariable")
 def post_var(obj: schema.ProjectVariable):
     return dbi.commit(obj)
 
-@app.get("/projectvariable/{var_id}", response_model=schema.ProjectVariable)
+@app.get("/projectvariable/{var_id}")
 def get_var(var_id:str):
     obj = dbi.get(schema.ProjectVariable, var_id)
     if not obj:
         raise HTTPException(status_code=404, detail="datafile not found")
-    return 
+    return obj
 
 @app.get("/projectvariable")
 def get_var():
