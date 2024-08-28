@@ -88,12 +88,12 @@ def _pre(script:Script, is_test=False):
     all_params = {'dbserver_uri': url, 'url': url}
     all_params = script.model_dump()
 
-    if script.device_id:
+    if not is_test and script.device_id:
         all_params['device'] = device_api.get(script.device_id).model_dump()
     else:
         all_params['device'] = []
-        
-    if script.id:
+
+    if not is_test and script.id:
         all_params['datafiles'] = full_api.get(f'qry/script/{script.id}/datafiles')
     else:
         all_params['datafiles'] = []
