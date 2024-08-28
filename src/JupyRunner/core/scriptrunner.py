@@ -84,7 +84,15 @@ def _pre(script:Script, is_test=False):
     if not is_test:
         # Convert script to dictionary
         log.info("Script %d: Converting to dictionary", script.id)
+    
+    all_params = {'dbserver_uri': url, 'url': url}
     all_params = script.model_dump()
+
+    if script.device_id:
+        all_params['device'] = device_api.get(script.device_id).model_dump()
+    
+    all_params['datafiles'] = full_api.get(f'qry/script/{script.id}/datafiles')
+        
 
     if not is_test:
         # Create output directory if it doesn't exist
@@ -99,6 +107,7 @@ def _pre(script:Script, is_test=False):
         params_json['follow_up_script'] = {'script_in_path': '', 'script_params_json': {}}
     
     all_params.update(params_json)
+
 
     # sanitize
     all_params = json.loads(json.dumps(all_params, default=schema.json_serial))
@@ -152,6 +161,7 @@ def run_script(script_id:int):
         log.info("Script %d: Running", script.id)
         script = set_prop_remote(script, status = STATUS.RUNNING, time_started = get_utcnow())
 
+        
         helpers_mattermost.send_mattermost(f'Script {script.id}: RUNNING with:  {script.script_in_path} (VER:{script.script_version}) -> {script.script_out_path}')
         # Run the script using Papermill
         nb = papermill.execute_notebook(
