@@ -168,3 +168,17 @@ def get_sys_info():
     info_string += f"\n{'=' * 40} System Information {'=' * 40}"
     
     return info_string
+
+
+def has_write_permission(path):
+    """
+    Checks if the current user has write permission to the specified path.
+
+    Args:
+        path: The path to check.
+
+    Returns:
+        True if the user has write permission, False otherwise.
+    """
+
+    return os.access(path, os.W_OK)

@@ -1,9 +1,5 @@
 version: '2.0'
 
-volumes:
-  vjupyrun_db:
-  vjupyrun_data:
-
 services:
   jupyrun_db:
     image: jupyrun_db:latest 
@@ -18,12 +14,10 @@ services:
       dockerfile: deploy/main/Dockerfile
 
     volumes:
-      # - /var/meertest/meertest_db:/home/jovyan/db:rw
-      # - /var/meertest/meertest_shared:/home/jovyan/shared:rw
       # - "C:/Users/tglaubach/Nextcloud/davmount/skampieng_db/jupyrun_db:/home/jovyan/db:rw"
       # - "C:/Users/tglaubach/Nextcloud/davmount/skampieng_db/jupyrun_shared:/home/jovyan/shared:rw"
-      - vjupyrun_db:/home/jovyan/db:rw
-      - vjupyrun_data:/home/jovyan/shared:rw
+      - /var/jupyrun/db:/home/jovyan/db:rw
+      - /var/jupyrun/shared:/home/jovyan/shared:rw
 
     ports:
       - "7990:8080"
@@ -37,12 +31,12 @@ services:
       dockerfile: deploy/procserver/Dockerfile
     image: "jupyrun_proc:latest"
     volumes:
-      # - /var/meertest/meertest_db:/home/jovyan/db:rw
-      # - /var/meertest/meertest_shared:/home/jovyan/shared:rw    
+      - /var/jupyrun/db:/home/jovyan/db:rw
+      - /var/jupyrun/shared:/home/jovyan/shared:rw
+
       # - "C:/Users/tglaubach/Nextcloud/davmount/skampieng_db/jupyrun_db:/home/jovyan/db:rw"
       # - "C:/Users/tglaubach/Nextcloud/davmount/skampieng_db/jupyrun_shared:/home/jovyan/shared:rw"
-      - vjupyrun_db:/home/jovyan/db:rw
-      - vjupyrun_data:/home/jovyan/shared:rw
+
     environment:
       HOME: /home/jovyan
       JUPYTER_TOKEN: "jupyrun"
@@ -57,6 +51,7 @@ services:
     ports:
       - "7991:8888"
     volumes:
-      - vjupyrun_data:/home/jovyan/
+      - /var/jupyrun/shared:/home/jovyan/shared:rw
     environment:
       JUPYTER_ENABLE_LAB: "yes"
+      JUPYTER_TOKEN: "jupyrun"

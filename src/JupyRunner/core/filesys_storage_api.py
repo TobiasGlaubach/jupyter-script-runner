@@ -132,8 +132,9 @@ def setup(config):
     # _log.info(f'         expanduser: "{os.expanduser("~")}"')
     log.info(f'              $HOME: "{home}"')
     log.info(f'                CWD: "{os.getcwd()}"')
-    log.info(f'    Writing data to: "{default_dir_data}"')
-    log.info(f'    Writing repo to: "{default_dir_repo}"')
+    log.info(f'    Writing data to: "{default_dir_data}" can_write={os.access(default_dir_data, os.W_OK)}')
+    log.info(f'    Writing repo to: "{default_dir_repo}" can_write={os.access(default_dir_repo, os.W_OK)}')
+
 
 def start(config):
         
@@ -218,6 +219,5 @@ def get_script_save_dir(dtime:datetime.datetime, experiment_id:int, device_id:st
     if make_dir:
         mkdir(fulldir, raise_ex=True)
     return fulldir
-
 
 

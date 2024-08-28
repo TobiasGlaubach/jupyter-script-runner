@@ -1,6 +1,7 @@
 
 
 import datetime, json
+import os
 import traceback
 from sqlmodel import Session, create_engine, SQLModel, select
 # from sqlalchemy.orm import select_related
@@ -49,6 +50,10 @@ def _json_deserializer(dc):
 def setup(config):
     global engine, sqlite_url, sqlite_file_name
     sqlite_file_name = config.get('db', {})['filepath']
+    helpers.log.info(f"Starting with DB location: {sqlite_file_name=} (can_write={os.access(sqlite_file_name, os.W_OK)})")
+
+     
+    
     sqlite_url = f"sqlite:///{sqlite_file_name}"
     connect_args = {"check_same_thread": False}
     engine = create_engine(sqlite_url, echo=True, connect_args=connect_args, json_serializer=json_serializer, json_deserializer=json_deserializer)
