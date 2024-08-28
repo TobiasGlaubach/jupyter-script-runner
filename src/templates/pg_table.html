@@ -116,6 +116,10 @@ function get_color_from_status(status){
     }
 }   
 
+function sanitizeText(text) {
+  const regex = /[^a-zA-Z0-9\s]/g; // Global flag to replace all occurrences
+  return text.replace(regex, ' ');
+}
 
 // // Initialize the datepicker
 // $('.datepicker-start').datepicker({
@@ -258,11 +262,9 @@ function loadata() {
                 { 
                     name: 'status',
                     formatter: (cell, row) => {
-                        const errors = row.cells[i_errors].data;
-                        const regex = /^[a-zA-Z0-9\s]+$/;
-                        const errors2 = regex.test(errors) ? errors : '';
+                        const errors = sanitizeText(row.cells[i_errors].data);
 
-                        return gridjs.html(`<strong title="ERRORS: ${errors2}"><pre style="color:${get_color_from_status(cell)};"> ${cell} </pre></strong>`);
+                        return gridjs.html(`<strong title="ERRORS: ${errors}"><pre style="color:${get_color_from_status(cell)};"> ${cell} </pre></strong>`);
                     }
                 },
                 { 

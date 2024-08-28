@@ -32,7 +32,12 @@ def run(script_id):
 
     log.info(f'run_script with {PID=} and {script_id=} is starting')
     
+    scriptrunner.setup(config)
     api_interface.setup(config)
+    
+    scriptrunner.start(config)
+    api_interface.start(config)
+
     script = scriptrunner.run_script(script_id)
     scriptrunner.init_follow_up_script(script)
 
