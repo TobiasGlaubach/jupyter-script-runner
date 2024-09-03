@@ -35,7 +35,7 @@ def setup(cnfg):
     api_interface.setup(cnfg)
     helpers_mattermost.setup(cnfg)
 
-    global config, api, full_api, var_api, dfi_api, device_api
+    global config, api, url, full_api, var_api, dfi_api, device_api
     config = cnfg
 
     
@@ -73,7 +73,7 @@ def prepare_for_run(script:Script):
 def _pre(script:Script, is_test=False):
     
     if not is_test:
-        log.info("Script %d: setting default fields", script.id)
+        log.info(f"Script {script.id}: setting default fields", )
     
     script.set_script_name()
     script.set_script_version()
@@ -83,10 +83,12 @@ def _pre(script:Script, is_test=False):
 
     if not is_test:
         # Convert script to dictionary
-        log.info("Script %d: Converting to dictionary", script.id)
+        log.info(f"Script {script.id}: Converting to dictionary")
     
+    assert url, f"ERROR was setup called properly? the dbserver url is None! {url=}"
+
     all_params = {'dbserver_uri': url, 'url': url}
-    all_params = script.model_dump()
+    all_params.update(script.model_dump())
 
     if not is_test and script.device_id:
         all_params['device'] = device_api.get(script.device_id).model_dump()
@@ -102,7 +104,7 @@ def _pre(script:Script, is_test=False):
         # Create output directory if it doesn't exist
         output_dir = os.path.dirname(script.script_out_path)
         os.makedirs(output_dir, exist_ok=True)
-        log.info("Script %d: Created output directory if needed: %s", script.id, output_dir)
+        log.info(f"Script {script.id}: Created output directory if needed: {output_dir}")
 
     # Extract and merge parameters
     all_params['script_id'] = all_params.pop("id")
@@ -115,7 +117,7 @@ def _pre(script:Script, is_test=False):
 
     # sanitize
     all_params = json.loads(json.dumps(all_params, default=schema.json_serial))
-    log.info("Script %d: Extracted and merged parameters", script.id)
+    log.info(f"Script {script.id}: Extracted and merged parameters")
 
     return script, all_params
 
@@ -155,14 +157,14 @@ def run_script(script_id:int):
     try:
         script = get(int(script_id))
 
-        log.info("Script %d: Starting", script.id)
+        log.info(f"Script {script.id}: Starting")
         
 
         script = set_prop_remote(script, status = STATUS.STARTING)
 
         script, all_params = _pre(script, is_test=False)
         
-        log.info("Script %d: Running", script.id)
+        log.info(f"Script {script.id}: Running")
         script = set_prop_remote(script, status = STATUS.RUNNING, time_started = get_utcnow())
 
         
@@ -175,11 +177,11 @@ def run_script(script_id:int):
             kernel_name="python3"
         )
 
-        log.info(f"Script {script.id}: Finished running with Papermill", script.id)
+        log.info(f"Script {script.id}: Finished running with Papermill")
 
         # Set script status to FINISHING
         script = set_prop_remote(script, status = STATUS.FINISHING)
-        log.info("Script %d: Finishing on", script.id)
+        log.info(f"Script {script.id}: Finishing on")
 
         # Convert the output notebook to HTML
         html_exporter = nbconvert.HTMLExporter()
@@ -210,11 +212,13 @@ def run_script(script_id:int):
 
         script = commit(script)
 
+        # full_api.get(f'action/script/{script.id}/trigger_upload')
+
         return script
 
     except Exception as e:
         raise
-        log.error("Script %d: Error running script: %s", script.id, str(e))
+        log.error(f"Script {script.id}: Error running script: {e}")
         script.status = STATUS.ERROR
         script.append_error_msg(traceback.format_exc())  # Store traceback info
         commit(script)

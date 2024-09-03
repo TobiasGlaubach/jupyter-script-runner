@@ -78,36 +78,24 @@ def add_to_db(session, obj):
 
     return obj
 
+def set_propert_sub(session, obj_type:type, obj_id, **kwargs):
+    obj = session.get(obj_type, obj_id)
+    if not obj:
+        raise KeyError(f'the object id {obj_id=} for {obj_type=} was not found on the server')
+    for key, v in kwargs.items():
+        if not hasattr(obj, key):
+            raise KeyError(f'the object id {obj_id=} for {obj_type=} does not have the property {key=}, which supposed to be set')
+        kwargs[key] = _update_factory(key, getattr(obj, key), v)
+    obj.sqlmodel_update(kwargs)
+    obj.last_time_changed = helpers.get_utcnow()  # Update timestamp
+    session.commit()
+    session.refresh(obj)
+    return obj
+    
 
-def set_property(data_type:type, obj_id, **kwargs):
+def set_property(obj_type:type, obj_id, **kwargs):
     with Session(engine) as session:
-
-        obj = session.get(data_type, obj_id)
-        if not obj:
-            raise KeyError(f'the object id {obj_id=} for {data_type=} was not found on the server')
-        for key, v in kwargs.items():
-            if not hasattr(obj, key):
-                raise KeyError(f'the object id {obj_id=} for {data_type=} does not have the property {key=}, which supposed to be set')
-            kwargs[key] = _update_factory(key, getattr(obj, key), v)
-        obj.sqlmodel_update(kwargs)
-        obj.last_time_changed = helpers.get_utcnow()  # Update timestamp
-        session.commit()
-        session.refresh(obj)
-        return obj
-        # new_obj = data_type.model_validate(kwargs)
-        # for key, v in kwargs.items():
-        #     if not hasattr(obj, key):
-        #         raise KeyError(f'the object id {obj_id=} for {data_type=} does not have the property {key=}, which supposed to be set')
-        #     setattr(obj, key, getattr(new_obj, key))
-        # return add_to_db(session, obj)
-
-
-# def __test_script_params_json(obj):
-#     if hasattr(obj, 'script_params_json'):
-#         assert not obj.script_params_json or isinstance(obj.script_params_json, dict)
-#         log.debug('datatype for script_params_json checks out!')
-#         print('OK!'*200)
-
+        return set_propert_sub(session, obj_type, obj_id, **kwargs)
 
 
 def commit(obj):
@@ -118,6 +106,7 @@ def commit(obj):
             
             kwargs = obj.model_dump(exclude_unset=True)
             log.debug(f'COMMIT existing with {kwargs=}')
+            
             for key, v in kwargs.items():
                 if not hasattr(obj, key):
                     raise KeyError(f'the object {obj} does not have the property {key=}, which supposed to be set')

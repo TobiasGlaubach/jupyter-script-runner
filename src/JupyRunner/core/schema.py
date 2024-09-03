@@ -71,7 +71,7 @@ def json_serial(obj):
         return obj.name
 
 
-    raise TypeError ("Type %s not serializable" % type(obj))
+    raise TypeError (f"Type{type(obj)=} not serializable")
 
 
 
@@ -94,13 +94,17 @@ class DATAFILE_TYPE(enum.StrEnum):
     """
 
     UNKNOWN = "unknown"
+    JSON = "json"
     TEXTFILE = "text"
+    REPORT = "rep"
     DATAFRAME = "dataframe"
     BINARY = "binary"
 
 
 class Device(SQLModel, table=True):
     id: str = Field(primary_key=True, unique=True, nullable=False)
+    source: str = Field(nullable=False)
+
     address: str = Field(default='', nullable=False)
     connection_protocol: str = Field(default='', nullable=False)
     configuration: str = Field(default='', nullable=False)
@@ -228,7 +232,7 @@ class Script(SQLModel, table=True):
         if name.startswith('analysis_'): name = name[len('analysis_'):]
         if name.startswith('base_'): name = name[len('base_'):]
 
-        device_id = self.device_id if self.device_id else 'nd'
+        device_id = self.device_id if self.device_id else 'no_device'
         script_id = self.id
         pth_out = filesys.get_script_save_filepath(self.time_started, script_id, device_id, name, make_dir=False)
 
@@ -271,7 +275,8 @@ class Datafile(SQLModel, table=True):
     data_type: DATAFILE_TYPE = Field(default=DATAFILE_TYPE.UNKNOWN, nullable=False)
     mime_type: str = Field(default='', nullable=False)
 
-    source: str = Field(nullable=False)
+    file_path: str = Field(nullable=False)
+    locations_storage_json: Optional[dict] = Field(sa_column=Column(JSON), default_factory=lambda: {})
     data_json: Optional[dict] = Field(sa_column=Column(JSON), default_factory=lambda: {})
     comments: str = Field(default='', nullable=False)
     time_initiated: datetime.datetime = Field(nullable=False, default_factory=helpers.get_utcnow)

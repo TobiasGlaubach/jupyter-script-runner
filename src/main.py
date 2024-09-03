@@ -1,11 +1,13 @@
 
 from contextlib import asynccontextmanager
 import datetime
+import json
 import os
 import subprocess
 import time
 import traceback
-from typing import Any, Callable, Dict, List
+from typing import Annotated, Any, Callable, Dict, List
+import zipfile
 import nbconvert
 
 from fastapi import FastAPI, Form, HTTPException, Path, Query, Request, Response, UploadFile, File
@@ -101,7 +103,8 @@ def make_datafile_source_url(script:schema.Script, filename):
     src = script.get_data_dir()
 
     for k, v in serializers.items():
-        if v.test_source_matches(src):
+
+        if v.test_should_upload(src):
             log.debug(f'serializer "{k}" matched for {src}')
             return v.make_source(src, filename)
             
@@ -345,6 +348,45 @@ def get_var():
 
 
 
+@app.get("/downloadq")
+async def download_file_qry(path: str = Query(...)):
+    try:
+        res = _download(path)
+        if res == 404:
+            raise HTTPException(status_code=404, detail="File or directory not found")
+        
+        return res
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Internal Server Error: {e}")
+
+
+@app.get("/download/{path:path}", response_model=None)
+async def download_file(path: str) -> FileResponse|None:
+    return _download(path)
+
+def _download(path:str):
+    log.info(f'download for path: {path}')
+    
+    p = path.lstrip('/')
+    dd = filesys_storage_api.default_dir_data.rstrip('/')
+    if not p.startswith(dd):
+        file_path = dd + '/' + p
+    else:
+        file_path =  p
+    assert file_path.startswith(dd), f'can only download from folder "{dd}" but you requested {file_path=}'
+
+    if os.path.isfile(file_path):
+        return FileResponse(file_path)
+    elif os.path.isdir(file_path):
+        zip_path = file_path + ".zip"
+        with zipfile.ZipFile(zip_path, 'w') as zipf:
+            for root, dirs, files in os.walk(file_path):
+                for file in files:
+                    zipf.write(os.path.join(root, file), os.path.relpath(os.path.join(root, file), file_path))
+
+        return FileResponse(zip_path)
+    else:
+        return 404
 
 
 @app.post("/action/script/{script_id}/upload_data_many_js")
@@ -380,162 +422,205 @@ def _action_script_upload_many(script_id:int, files: list[UploadFile] = File(...
         datafile_objs = []
         for file in files:
             filename = file.filename if file.filename else f"default_datafile_{time.time()}.data"
-            dtaf = schema.Datafile(script_id=script.id, device_id=script.device_id, source=f'{ddir}/{filename}')
-            datafile_objs.append(dbi.add_to_db(session, dtaf))
+            dtaf = schema.Datafile(script_id=script.id, device_id=script.device_id, file_path=f'{ddir}/{filename}')
+            obj = dbi.add_to_db(session, dtaf)
+            datafile_objs.append(obj)
 
-    return _upload_and_register_files(datafile_objs, files)
+    kwargs = _upload_and_register_files(datafile_objs, files)
 
-@app.post("/action/datafile/upload")
-async def action_urf_single(datafile_obj: schema.Datafile, file: UploadFile = File(...)):
-    """same as upload_and_register_files but for a single file"""
-    return _upload_and_register_files({file.filename:datafile_obj}, [file])
+    with dbi.se() as session:
+        for dfi_id, kw in kwargs.items():
+            dbi.set_propert_sub(session, schema.Datafile, dfi_id, **kw)
+
+
+    return 
 
 
 @app.post("/action/datafile/upload_many")
 async def action_urf_many(datafile_objs: Dict[str, schema.Datafile], files: list[UploadFile] = File(...)):
-    """
-    Uploads and registers data files asynchronously.
-
-    This function takes a dictionary of `DataFile` objects and a list of uploaded files.
-    It performs the following steps:
-
-    1. Asserts that each uploaded file's filename exists in the `datafile_objs` dictionary.
-    2. Sets the MIME type of each `DataFile` object based on the corresponding uploaded file.
-    3. Infers the data type of each `DataFile` object based on the MIME type:
-        - If the MIME type contains "text", the data type is set to `schema.DATAFILE_TYPE.TEXTFILE`.
-        - If the MIME type contains "pandas", the data type is set to `schema.DATAFILE_TYPE.DATAFRAME`.
-        - Otherwise, the data type is set to `schema.DATAFILE_TYPE.BINARY`.
-    4. Iterates through registered serializers and tries to find a compatible one for each data file.
-        - If a matching serializer is found, it is used to upload the data file content.
-        - If no matching serializer is found, an HTTPException with status code 400 is raised.
-    5. Uses the `dbi` to add all data files to the database.
-    6. Returns a dictionary containing a success message, a success flag, and the result
-       from the database operation.
-
-    Raises:
-        HTTPException (status_code=500): If an error occurs during file upload or database operation.
-
-    Args:
-        datafile_objs: A dictionary mapping filenames (str) to `schema.DataFile` objects.
-        files: A list of uploaded files using the `UploadFile` type.
-
-    Returns:
-        A dictionary containing a success message, success flag, and the database operation result.
-    """
     return _upload_and_register_files(datafile_objs, files)
 
-@app.post("/action/datafile/upload")
-async def action_urf_single(datafile_obj: schema.Datafile, file: UploadFile = File(...)):
-    """same as upload_and_register_files but for a single file"""
-    return _upload_and_register_files({file.filename:datafile_obj}, [file])
 
+@app.post("/action/upload_data_many_js")
+async def upload_files_for_script(script_id: int, files: Annotated[
+        list[UploadFile], File(description="Multiple files to upload")
+        ]):
+    try:
+        
+        datafile_objs = filedict2datafiles(script_id, files)
 
-class UploadFilesToScriptRequest(BaseModel):
-    script_in_path: str = '/home/jovyan/shared/repos/example_script.ipynb'
-    script_params_json: dict | None = {'param1': 1}
-    start_condition: datetime.datetime | None = helpers.now_iso()
-    end_condition: datetime.datetime | None = helpers.tomorrow_iso()
-    device_id: str | None = None
+        datafiles = dbi.add_many(list(datafile_objs.values()))
+        datafile_objs = dict(zip(datafile_objs.keys(), datafiles))
+
+        kwargs = await _upload_and_register_files(datafile_objs, files, ret_kwargs=True)
+
+        ret = []
+        nok = 0
+        for datafile_id, kwrgs in kwargs.items():
+            dfa_new = dbi.set_property(schema.Datafile, datafile_id, **kwrgs)
+            assert not dfa_new.errors, f'DataFile with ID: {dfa_new.id} has errors:\n{dfa_new.errors}'
+            assert dfa_new.status in [schema.STATUS_DATAFILE.READY, schema.STATUS_DATAFILE.EMPTY], f'status is not OK! {dfa_new.status=}, {dfa_new.errors=}'
+            assert dfa_new.locations_storage_json, 'seems like nothing was uploaded!'
+            ret.append(dfa_new.model_dump() if hasattr(dfa_new, 'model_dump') else str(dfa_new))
+            if not dfa_new.status in [schema.STATUS_DATAFILE.ERROR, schema.STATUS_DATAFILE.FAULTY]:
+                nok += 1
+        
+
+        pre = 'ERROR: only ' if nok != len(files) else 'SUCCESS: '
+        context = {
+            "res_info": f"{pre}N={nok}/{len(files)} Data file(s) uploaded sucessfully.",
+            "res_color": 'danger' if nok != len(files) else 'success',
+            "res_content": json.dumps({k.filename: v for k, v in zip(files, ret)}, indent=2, default=schema.json_serial),
+            "res_content_color": "black"
+        }
+
+    
+    except Exception as err:
+        log.exception(err)
+        context = {
+            "res_info": f"ERROR: {err}",
+            "res_color": 'danger',
+            "res_content": traceback.format_exception(err, limit=5),
+            "res_content_color": "red"
+        }
+    return context
+
+    # template = templates.get_template(f'pg_upload_success.html')
+    # rendered_html = template.render(context)
+    # return HTMLResponse(status_code=200, content=rendered_html)
+
 
 @app.post("/action/script/{script_id}/upload/files")
-async def upload_files_for_script(script_id: int, request: Request, files: list[UploadFile] = File(...)) -> Dict[str, Any]:
-    """
-    Uploads files associated with a script asynchronously.
+async def upload_files_for_script(script_id: int, files: Annotated[
+        list[UploadFile], File(description="Multiple files to upload")
+        ]) -> Dict[str, Any]:
+    try:
+        
+        datafile_objs = filedict2datafiles(script_id, files)
+        datafiles = dbi.add_many(list(datafile_objs.values()))
+        datafile_objs = dict(zip(datafile_objs.keys(), datafiles))
 
-    This function handles uploading files for a specific script identified by the `script_id`.
-    It retrieves the script object from the database and performs the following:
+        kwargs = await _upload_and_register_files(datafile_objs, files, ret_kwargs=True)
 
-    1. Retrieves any additional JSON data from the request body.
-    2. Validates that the request body doesn't explicitly set reserved fields:
-        - `script_id`: This field should be provided through the path parameter.
-        - `device_id`: This field should be retrieved from the associated script.
-        - `file_type`: This field is determined based on the file extension.
-        - `source`: This field is generated from the script information and filename.
-    3. Creates a dictionary to store `DataFile` objects with filenames as keys.
-    4. Iterates through each uploaded file:
-        - Extracts the filename and extension.
-        - Determines the data type based on the extension (e.g., `.df`, `.dataframe`, `.pandas` for DataFrame).
-        - Generates a unique filename for DataFrames to ensure consistency (appends '.csv' extension).
-        - Constructs a `DataFile` object based on script information, filename, data type, and source URL.
-    5. Calls the `_upload_and_register_files` function to handle data upload and registration.
+        ret = []
+        for datafile_id, kwrgs in kwargs.items():
+            dfa_new = dbi.set_property(schema.Datafile, datafile_id, **kwrgs)
+            assert dfa_new.status in [schema.STATUS_DATAFILE.READY, schema.STATUS_DATAFILE.EMPTY], f'status is not OK! {dfa_new.status=}'
+            assert dfa_new.locations_storage_json, 'seems like nothing was uploaded!'
+            ret.append(dfa_new)
 
-    Raises:
-        HTTPException (status_code=404): If the script with the provided `script_id` is not found.
+        return {"message": "Data file uploaded successfully", "success": True, "result": ret}
+    
+    except Exception as err:
+        log.exception(err)
+        raise
 
-    Args:
-        script_id: The ID of the script to associate the uploaded files with.
-        request: The FastAPI request object for accessing additional data.
-        files: A list of uploaded files using the `UploadFile` type.
 
-    Returns:
-        The dictionary returned by the `_upload_and_register_files` function,
-        containing information about the upload result and success status.
-    """
 
-    kwargs = await request.json()
-
+def filedict2datafiles(script_id: int, files: list[UploadFile]):
     script = dbi.get(schema.Script, script_id)
     if not script:
-        raise HTTPException(status_code=404, detail="datafile not found")
-    
-    
-    for k in "script_id device_id file_type source".split():
-        assert not k in kwargs, 'can not explicitly set "{k}" with this route! please use the /action/upload/datafile(s) route(s) directly for this!'
+        raise HTTPException(status_code=404, detail=f"script with {script_id=} not found")
 
     datafile_objs = {}
     for file in files:
+
+
         name, extension = os.path.splitext(file.filename)
 
         if extension in ['df', 'dataframe', 'pandas']:
             file_type = schema.DATAFILE_TYPE.DATAFRAME
             filename = name + '.csv'
+        elif extension in ['rep']:
+            file_type = schema.DATAFILE_TYPE.REPORT
+            filename = name + '.rep'
         else:
             file_type = schema.DATAFILE_TYPE.UNKNOWN
             filename = file.filename
 
-        source = make_datafile_source_url(script, filename)
+
+        file_path = os.path.join(script.get_data_dir(), filename).replace('\\', '/')
+        dda = filesys_storage_api.default_dir_data.replace('\\', '/')
+        if file_path.startswith(dda):
+            file_path = file_path[len(dda):]
+        file_path = file_path.lstrip('/')
 
         datafile_objs[file.filename] = schema.Datafile(
                         script_id=script_id, 
                         device_id=script.device_id, 
                         file_type=file_type, 
-                        source=source)
+                        file_path=file_path,
+                        filename=os.path.basename(file_path))
+        datafile_objs[file.filename]
 
-    return _upload_and_register_files(datafile_objs, files)
+    datafile_objs = {k:v for k, v in zip(datafile_objs.keys(), dbi.add_many(list(datafile_objs.values())))}
+
+    return datafile_objs
 
 
-
-async def _upload_and_register_files(datafile_objs: Dict[str, schema.Datafile], files: list[UploadFile] = File(...)):
+async def _upload_and_register_files(datafile_objs: Dict[str, schema.Datafile], files: list[UploadFile] = File(...), ret_kwargs=False):
     global serializers
 
-    try:
-        for file in files:
+    kwargs = {}
+    res = []
+
+    for file in files:
+        try:
             assert file.filename in datafile_objs, f'the uploaded file {file.filename=} is not in the corresponding dict of datafile objects! make sure you give a valid datafile_obj for each dict uploaded file!'
 
             datafile = datafile_objs[file.filename]
             datafile.mime_type = file.content_type
-            if datafile.data_type == schema.DATAFILE_TYPE.UNKNOWN:
+            if datafile.data_type == schema.DATAFILE_TYPE.UNKNOWN: #and not datafile.mime_type is None:
                 if 'text' in datafile.mime_type:
                     datafile.data_type = schema.DATAFILE_TYPE.TEXTFILE
+                if 'json' in datafile.mime_type:
+                    datafile.data_type = schema.DATAFILE_TYPE.JSON
                 elif 'pandas' in datafile.mime_type:
                     datafile.data_type = schema.DATAFILE_TYPE.DATAFRAME
                 else:
                     datafile.data_type = schema.DATAFILE_TYPE.BINARY
 
-            found = False
+            content_bts = await file.read()
+
+            dfa = None
             for k, v in serializers.items():
-                if v.test_source_matches(datafile):
+                log.info(f'testing serializer {k} on {datafile}')
+
+                if v.test_should_upload(datafile):
                     log.info(f'serializer "{k}" matched for {datafile}')
-                    v.upload(datafile, file)
+                    dfa = await v.upload(datafile, content_bts)
 
-            if not found:
-                raise HTTPException(status_code=400, detail="Invalid source in datafile!")
 
-        res = dbi.add_many(list(datafile_objs.values()))
-        return {"message": "Data file uploaded successfully", "success": True, "result": res}
-    
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error uploading data file: {str(e)}")
+            if dfa is None:
+                raise HTTPException(status_code=400, detail="No storage location was found in the server config to save this data to!")
+            
+            assert datafile.locations_storage_json, 'seems like nothing was uploaded! (first test!)'
+
+            # print('\n'*10)
+            # print(dfa.model_dump())
+            # print('\n'*10)
+
+            datafile.status = schema.STATUS_DATAFILE.READY if len(content_bts) > 0 else schema.STATUS_DATAFILE.EMPTY
+
+            kwargs[datafile.id] = {
+                'status': datafile.status,
+                'locations_storage_json': datafile.locations_storage_json,
+                'data_type': datafile.data_type,
+                'mime_type': datafile.mime_type
+            }
+
+        except Exception as e:
+            log.exception(e)
+            s = str(e.res.text) if hasattr(e, 'res') else str(e)
+            s = f"ERROR: {s}"
+            datafile.append_error_msg(s)
+            datafile.status = schema.STATUS_DATAFILE.ERROR
+            kwargs[datafile.id] = {'errors': datafile.errors, 'status': datafile.status}
+
+            # raise HTTPException(status_code=500, detail=f"Error uploading data file: {str(e)}")
+        res.append(datafile)
+
+    return kwargs if ret_kwargs else res
     
 @app.get("/qry/tabledata")
 async def qry_scripts(start_date:datetime.datetime|None=Query(default=None), 
@@ -579,6 +664,29 @@ async def ids_projectvariable(script_id:int):
         return script.script_params_json
 
 
+@app.get("/qryq")
+async def ids_projectvariable(table:str= Query('either device, datafile, or script'), id:str|int = Query('the id which to query for')):
+    assert table in 'device datafile script'.split(), f'kwarg "el_type" must be in either device, datafile, or script, but was {table=} ({type(table)=})'
+
+    with dbi.se() as session:
+        if table == 'datafile':
+            d = session.get(schema.Datafile, int(id))    
+            if not d:
+                raise HTTPException(status_code=404, detail=f"datafile with {id=} not found")
+            return [d]
+        elif table == 'device':
+            d = session.get(schema.Device, id)
+            if not d:
+                raise HTTPException(status_code=404, detail=f"device with {id=} not found")
+            return d.datafiles
+        elif table == 'script':
+            d = session.get(schema.Script, int(id))
+            if not d:
+                raise HTTPException(status_code=404, detail=f"script with {id=} not found")
+            return d.datafiles
+        else:
+            raise KeyError(f'{table=} is unknown and must be either device datafile or script')
+    
 @app.get("/qry/device/{device_id}/datafiles")
 async def ids_projectvariable(device_id:str):
     with dbi.se() as session:

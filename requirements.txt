@@ -24,3 +24,8 @@ psutil
 
 # numpy
 # pandas
+
+
+pyncclient
+cryptography
+xmltodict

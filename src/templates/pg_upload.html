@@ -12,54 +12,56 @@
 
 <div>
 
-    
-    <!-- The Modal -->
-    <form id="loginForm">
+    <!-- <div>
+        <form action="/files/" enctype="multipart/form-data" method="post">
+            <input name="files" type="file" multiple>
+            <input type="submit">
+        </form>
+        <form action="/uploadfiles/" enctype="multipart/form-data" method="post">
+            <input name="files" type="file" multiple>
+            <input type="submit">
+        </form>
+    </div>
 
-        <div id="drop-zone" class="drop-zone" >
+    <form action="/action/script/${script_id}/upload/files" enctype="multipart/form-data" method="post">
+        <input type="number" name="script_id" required>
+        <input name="files" type="file" multiple>
+        <input type="submit">
+    </form> -->
+
+    <div class="m-3">
+            
+        <form action="/action/upload_data_many_js" enctype="multipart/form-data" method="post">
 
             <div>
                 <h3 class="modal-title" id="loginModalLabel">JupyRunner WebUI - Manual File Upload</h3>
-                <small>(Click "Browse" or Drag and Drop a file here to upload)</small>
+                <small>(Click "Browse" to select Files to upload)</small>
             </div>
 
-            
-            <input type="file" id="file-input" style="display: none" multiple>
-            <button type="button" class="close" data-dismiss="modal" aria-label="Close">
-                <span aria-hidden="true">&times;</span>
-            </button>
-        </div>
-
-
-        <div style="max-width: fit-content; margin-left: auto; margin-right: auto;" class="mb-3">
-            <img src="/static/images/minerva.jpg">
-        </div>
-
-        <label for="basic-url">Script ID to attach files to:</label>
-        <div class="input-group mb-3">
-        <div class="input-group-prepend">
-            <span class="input-group-text" id="basic-addon3">id:</span>
-        </div>
-        <input type="number" id="script_id" placeholder="Script ID" min="0" step="1">
-        
-        <button type="button" class="btn btn-info" id="btn-openFileDialog" title="Show a open file dialog and select a files from local file system to upload instead">Browse For Files</button>
-
-        </div>
-
-        <div id="loginForm-body" class="m-3">
-            <h6>Selected Files</h6>
-            <div>
-                <ul class="list-group" id="file-list"></ul>
-                <button type="button" class="btn btn-warning m-3"  id="upload-button">Upload Selected Files</button>
+            <div style="max-width: fit-content; margin-left: auto; margin-right: auto;" class="mb-3">
+                <img src="/static/images/minerva.jpg">
             </div>
-        </div>
+
+            <label for="basic-url">Script ID to attach files to:</label>
+            <div class="input-group mb-3">
+                <div class="input-group-prepend">
+                    <span class="input-group-text">id:</span>
+                </div>
+                <input type="number" name="script_id" placeholder="Script ID" min="0" step="1">
+                <div class="input-group-prepend">
+                    <span class="input-group-text">Selected Files:</span>
+                </div>
+                <input class="form-control form-control-sm" id="formFileSm" type="file" name="files" multiple>              
+            </div>
+
+            <input type="submit" class="btn btn-warning" value="Upload"> 
+
+        </form>
 
         
+    </div>
 
-    </form>
-
-
-    <div class="container">
+    <div class="container" id="resContainer" style="display: none;">
         <!-- <div class="input-group input-group-sm mb-3" style="border-radius: 5px; border: 1px black solid; margin-left: 15px; margin: 10px; padding: 5px;">
             <div id="drop-zone">
                 <p>Drag and drop files here or click to select.</p>
@@ -70,156 +72,92 @@
     
     <div class="">
         <div class="row justify-content-md-left m-3" style="width: 100%;">
-            <div class="col-md-auto">
+            <div class="col-md-auto" id="resultAlertContainer">
                 <span id="resultAlert"></span>
+                <div class="loader"></div> 
             </div>
-            <div class="row m-3">
-                <h5>Result-JSON:</h5>
+            <div class="list-group" id="wrapper">
             </div>
-            <div class="row" style="margin: 10px; border-radius: 5px; border-color: black; border-width: 1px;border-style: solid; ">
-                <pre style="padding: 5px;">
-                    <code id="resultJson">
-                    </code>
-                </pre> 
+            <div  id="resultJsonContainer">                
+                <div class="row m-3">
+                    <h5>Result-JSON:</h5>
+                </div>
+                <div class="row" style="margin: 10px; border-radius: 5px; border-color: black; border-width: 1px;border-style: solid; ">
+                    <pre style="padding: 5px;">
+                        <code id="resultJson">
+                        </code>
+                    </pre> 
+                </div>
             </div>
-
         </div>
     </div>
 
     <hr>
-    <div id="wrapper">
-        
-    </div>
+
     
 </div>
 
 <script type="text/javascript">
 
 
-var files = [];
+const form = document.querySelector('form');
 
-const fileInput = document.getElementById('file-input');
-const dropArea = document.getElementById('drop-zone');
-const uploadButton = document.getElementById('upload-button');
-const scriptIdInput = document.getElementById('script_id');
-
-// ... (rest of your JavaScript code)
-
-
-function formatFileSize(size) {
-    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-    let i = 0;
-    while (size >= 1024 && i < units.length - 1) {
-        size /= 1024;
-        i++;
-    }
-    return `${size.toFixed(2)} ${units[i]}`;
+function tryParseJSON(jsonStr) {
+  try {
+    return JSON.parse(jsonStr);
+  } catch (error) {
+    console.error("Error parsing JSON:", error);
+    return null;
+  }
 }
 
-function handleFiles(files_local) {
-    setAlert(`handlefiles with N=${files_local.length} files`);
+form.addEventListener('submit', async (event) => {
+    event.preventDefault();
 
-    const fileList = document.getElementById('file-list');
-    fileList.innerHTML = ''; // Clear previous files
+    createSpinner()
 
-    for (const file of files_local) {
-        const listItem = document.createElement('li');
-        listItem.className = 'list-group-item';
+    const formData = new FormData(form);
+    const script_id = formData.get('script_id');
+    const url = `/action/upload_data_many_js?script_id=${script_id}`;
 
-        const fileIcon = document.createElement('i');
-        fileIcon.classList.add('fa', 'fa-paperclip', 'me-2');
-        listItem.appendChild(fileIcon);
-
-        const fileName = document.createElement('span');
-        fileName.textContent = file.name;
-        listItem.appendChild(fileName);
-
-        const fileSize = document.createElement('span');
-
-        fileSize.classList.add('text-muted', 'ms-2');
-        fileSize.textContent = formatFileSize(file.size);
-        listItem.appendChild(fileSize);
-        fileList.appendChild(listItem); 
-    }
-    
-    files = files_local;
-
-    setAlert(`handlefiles with N=${files_local.length} files DONE`);
-
-}
-
-fileInput.addEventListener('change', (e) => {
-    handleFiles(e.target.files);
-});
-
-document.getElementById('btn-openFileDialog').addEventListener('click', () => {
-    fileInput.click();
-});
+    setAlert(`beginning upload to: ${url}...`, showSpinner=1);
 
 
 
-function handleDrop(e) {
-    handleFiles(e.dataTransfer.files);
-}
-
-dropArea.addEventListener('dragover', preventDefaults);
-dropArea.addEventListener('dragenter', highlight);
-dropArea.addEventListener('dragleave', unhighlight);
-dropArea.addEventListener('drop', handleDrop);
-
-function preventDefaults(e) {
-    e.preventDefault();
-}
-
-function highlight(e) {
-    dropArea.classList.add('hover');
-}
-
-function unhighlight(e) {
-    dropArea.classList.remove('hover');
-}
-
-uploadButton.addEventListener('click', () => {
-
-    setAlert('Upload: entering...');
-
-    const scriptId = scriptIdInput.value;
-
-    if (!scriptId) {
-        setAlert('ERROR! Need to give a script ID to attach these files to');
-        return;
-    }
-    if (files.length <= 0) {
-        setAlert('ERROR! Need to supply files to upload');
-        return;
-    }
-    setAlert('Upload: starting...');
-    if (scriptId && files.length > 0) {
-        const formData = new FormData();
-        formData.append('script_id', Number(scriptId));
-
-        for (const file of files) {
-            formData.append('files', file);
-        }
-        const url = `/action/script/${scriptId}/upload_data_many_js`;
-        setAlert('Upload: Sending to: ' + url);
-        // Send a POST request to the API endpoint
-        fetch(url, {
+    try {
+        const response = await fetch(url, {
             method: 'POST',
             body: formData
-        })
-        .then(response => response.json())
-        .then(data => {
-            setAlert('Upload successful!', 'success', data);
-        })
-        .catch(error => {
-            setAlert('ERROR uploading files:', error);
         });
-    } else {
-        setAlert('Please enter a script ID and select at least one file.');
+
+        if (response.ok) {
+            const obj = await response.json();
+            console.log(obj);
+
+            var lg = document.getElementById('wrapper');
+            lg.innerHTML = '';
+            
+            const el = tryParseJSON(obj.res_content);
+            for (const key in el) {
+                if (Object.hasOwnProperty.call(el, key)) {
+                    lg.appendChild(datafile2listitem(el[key]));   
+                }
+            }
+            setAlert(obj.res_info, obj.res_color, obj.res_content);
+
+        } else {
+            setAlert('ERROR uploading files:' + response.statusText);
+        }
+    } catch (error) {
+        setAlert('ERROR An error occurred:' + error.message);
     }
 });
 
+function createSpinner() {
+  const spinner = document.createElement('div');
+  spinner.classList.add('loader');
+  return spinner;
+}
 
 function matchErrorKeyword(text) {
   const regex = /error/i; // 'i' flag for case-insensitive matching
@@ -229,7 +167,9 @@ function matchSuccessKeyword(text) {
   const regex = /success/i; // 'i' flag for case-insensitive matching
   return regex.test(text);
 }
-function setAlert(s, color=null, resObj=null,) {
+function setAlert(s, color=null, resObj=null, showSpinner=false) {
+    document.getElementById('resContainer').style.display = 'block';
+
     const c = color ? color : (matchErrorKeyword(s) ? 'danger' : (matchSuccessKeyword(s) ? 'success' : 'info'));
     const s2 = new Date().toISOString() + ' | ' + s;
 
@@ -248,17 +188,125 @@ function setAlert(s, color=null, resObj=null,) {
     // alertElement.style.overflowX='auto';
     document.getElementById('resultAlert').innerHTML = '';
     document.getElementById('resultAlert').appendChild(alertElement);
+    if (showSpinner) {
+        console.log('creating spinner...');
+        document.getElementById('resultAlert').appendChild(createSpinner());
+    }
 
     document.getElementById('resultJson').innerHTML = '';
     if (resObj) {
-        document.getElementById('resultJson').innerText = JSON.stringify(resObj, null, 2);
+        document.getElementById('resultJson').innerText = typeof resObj ==="string" ? resObj : JSON.stringify(resObj, null, 2);
+        document.getElementById('resultJsonContainer').style.display = 'block';
+    } else {
+        document.getElementById('resultJsonContainer').style.display = 'none';
     }
     
     
 
 }
 
-$('#loginModal').modal('show');
+function datafile2listitem(data) {
+        const item = document.createElement('div');
+        item.classList.add('list-group-item', 'align-items-start');
+    
+        const header = document.createElement('div');
+        header.classList.add('d-flex', 'w-100', 'justify-content-between');
+    
+        const title = document.createElement('h5'); 
+    
+        title.classList.add('mb-1');
+
+        var did = `<b>Script ID:</b> ${data.script_id}`;
+        if (data.script_id){
+            did = id2lnk('script', data.script_id, did, asString=true);
+        } 
+
+        var sid = `<b>Device ID:</b> ${data.device_id}`;
+        if (data.device_id){
+            sid = id2lnk('device', data.device_id,  sid, asString=true);
+        }
+
+        var fid = `<b>Datafile ID:</b> ${data.id}`;
+        if (data.id){
+            fid = id2lnk('dafafile', data.id, fid, asString=true);
+        }
+
+        title.innerHTML = `${sid} - ${did} - ${fid}`;
+    
+        const timestamp = document.createElement('small');
+        var s = new Date(data.last_time_changed).toISOString();
+        s = s.replace('T', ' ').replace('Z', ' UTC');
+        timestamp.textContent = 'LTC: ' +  s;
+    
+    
+        header.appendChild(title);
+        header.appendChild(timestamp);
+    
+        const description = document.createElement('p');
+        description.classList.add('mb-1');
+        description.textContent = `Filename: ${data.filename}`;
+    
+        const attributes = document.createElement('div');
+        const details = document.createElement('small');
+        details.textContent = `Status: ${data.status}, MIME Type: ${data.mime_type}, Data Type: ${data.data_type}`;
+        attributes.appendChild(details);
+        
+        attributes.appendChild(document.createElement('hr'));
+        const d = document.createElement('div');
+        d.innerText = 'Storage locations:'
+        attributes.appendChild(d);
+        
+        var found = false;
+        if (data.locations_storage_json) {
+            var ul = document.createElement('ul');
+            for (const loc in data.locations_storage_json) {
+                if (Object.hasOwnProperty.call(data.locations_storage_json, loc)) {
+                    const li = document.createElement('li');
+                    const e = data.locations_storage_json[loc];
+                    const sml2 = document.createElement('small');
+                    const st = document.createElement('strong');
+                    st.textContent = loc + ': ';
+                    sml2.appendChild(st);
+                    li.appendChild(sml2);
+                    if (e.link) {
+                        const sml = document.createElement('small');
+                        const link = document.createElement('a');
+                        link.href = e.link;
+                        link.textContent = e.full_path;
+                        sml.appendChild(link);
+                        li.appendChild(sml);
+                    } else {
+                        
+                        const encodedPath = encodeURIComponent(e.full_path);
+                        const lnk = `/downloadq?path=${encodedPath}`;
+                        const sml = document.createElement('small');
+                        const link = document.createElement('a');
+                        link.href = lnk;
+                        link.textContent = e.full_path;
+                        sml.appendChild(link);
+                        li.appendChild(sml);
+                    }
+                    ul.appendChild(li);
+                    found = true;
+                }
+            }   
+            
+            attributes.appendChild(ul);
+        }
+
+        if (!found) {
+            d.innerText += ' NONE!'
+        }
+
+        item.appendChild(header);
+        item.appendChild(description);
+        item.appendChild(details);
+        item.appendChild(attributes);
+    
+        return item;
+    }
+
 
 </script>
+
 {% endblock %}

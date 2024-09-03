@@ -6,6 +6,26 @@ globals:
   mattermost_uri: ''
   loglevel: INFO
 
+
+storage_locations:
+  # redmine:
+  #   url: 'https://my_redmine_server.domain'
+  #   login: 'path/to/your/token/file/info.rm'
+  #   kwargs: 
+  #     default_project: 'jupy_runner'
+  #   run_async: 1
+
+  nextcloud:
+    url: 'https://my_nextcloud_server.domain'
+    # login: '/home/jovyan/db/info.hash'
+    login: 'path/to/your/token/file/encrypted/by/Fernet/info.hash'
+    run_async: 0
+    kwargs: 
+      default_dir: '/your/nextcloud/path'
+    
+
+  local: null         # will save to default_dir_meas on null
+
 pathes:
   default_dir_meas: '/home/jovyan/shared/meas/'
   default_dir_repo: '/home/jovyan/shared/repos/'

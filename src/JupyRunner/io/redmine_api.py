@@ -15,14 +15,18 @@ class RedmineAccessor(object):
     def __init__(self, config) -> None:
         self.config = config
         
-    def test_source_matches(self, datafile:schema.Datafile):
-        return filesys_storage_api.is_pathname_valid(datafile.source)
+    def test_should_upload(self, datafile:schema.Datafile):
+        if 'redmine' in self.config['storage_locations'] and datafile.file_path:
+            raise NotImplementedError('can not upload to redmine, because this is not implemented yet!')
+        else:
+            return False
+        
 
     def upload(self, datafile:schema.Datafile, file):
-        assert datafile.source, 'LocalFile: can not upload, since no "source" is given'
+        assert datafile.file_path, 'LocalFile: can not upload, since no "source" is given'
         raise NotImplementedError()
     
-        api = LocalFileAccessor(datafile.source)
+        api = LocalFileAccessor(datafile.file_path)
         api.upload(file)
         datafile.data_json.update({'meta': api.get_meta()})
         return datafile 

@@ -332,9 +332,18 @@ function loadata() {
 
                 },
                 'script_version',
-                'errors',
+                {
+                    
+                    name: 'errors',
+                    formatter: (cell, row) => {
+                        const errors = sanitizeText(row.cells[i_errors].data);
+                        const s = cell.length < 200 ? cell : '...' + cell.substring(cell.length-200, cell.length-1);
+                        return gridjs.html(`<p style="color:red;" title="${errors}"> ${s} </p>`);
+                    }
+                },
                 'script_in_path'
             ];
+
             document.getElementById("wrapper").innerHTML='';
             console.log(obj);
 

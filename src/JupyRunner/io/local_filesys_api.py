@@ -18,15 +18,42 @@ class LocalFile(object):
     def __init__(self, config) -> None:
         self.config = config
 
-    def test_source_matches(self, datafile:schema.Datafile):
-        return filesys_storage_api.is_pathname_valid(datafile.source)
+    def mk_full_path(self, path):
+        dir = self.config['storage_locations'].get('local', None)
+        dir = filesys_storage_api.default_dir_data if not dir else dir
+        return os.path.join(dir, path).replace('\\', '/')
+    
+    def test_exists(self, path):
+        if os.path.exists(path):
+            return LocalFileAccessor(path).get_meta()
+        else:
+            return {}
 
-    def upload(self, datafile:schema.Datafile, file):
-        assert datafile.source, 'LocalFile: can not upload, since no "source" is given'
+    def test_should_upload(self, datafile:schema.Datafile):
+        if 'local' in self.config['storage_locations']:
+            path = self.mk_full_path(datafile.file_path)
+            return filesys_storage_api.is_pathname_valid(path)
+        return False
 
-        api = LocalFileAccessor(datafile.source)
+    async def upload(self, datafile:schema.Datafile, file:bytes):
+        assert self.test_should_upload(datafile), f'ERROR: "test_should_upload" failed before upload to {self}'
+        path = self.mk_full_path(self.config.get('local', datafile.file_path))
+        log.info(f'upload_local: saving data to: {path}')
+           
+        if self.test_exists(path):
+            raise FileExistsError(f'file "{path}" already exists @local_filesystem. Use update instead of upload!')
+        
+        api = LocalFileAccessor(path)
         api.upload(file)
-        datafile.data_json.update({'meta': api.get_meta()})
+
+        if datafile.locations_storage_json is None:
+            datafile.locations_storage_json = {}
+
+        if not 'local' in datafile.locations_storage_json:
+            datafile.locations_storage_json['local'] = {}
+
+        datafile.locations_storage_json['local'].update({'meta': api.get_meta(), 'full_path': path})
+
         return datafile 
     
     def destruct(self):
@@ -79,6 +106,9 @@ class LocalFileAccessor(object):
             return fp.read()
   
     def upload(self, content:bytes):
+        if not os.path.exists(os.path.dirname(self.p)):
+            os.makedirs(os.path.dirname(self.p))
+
         with open(self.p, 'wb') as fp:
             fp.write(content)
 

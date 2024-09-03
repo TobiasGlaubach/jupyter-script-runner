@@ -3,7 +3,7 @@
 {% extends "base.html" %}
 
 {% block metatags %}
-<title>JupyRunner WebUI - Plotting</title>
+<title>JupyRunner WebUI - Data Access</title>
 <meta name="description" content="JupyRunner WebUI - Plotting">
 {% endblock %}
 
@@ -11,8 +11,307 @@
 {% block content %}
 
 <div class="mb-3" style="margin-left: 10px; margin-right: 10px;">
-    <h5>WIP coming soon!</h5>
+    <h5>Select For what element to query Datafile Info:</h5>
+    
+    <div class="row">
+        <div class="col">
+            <label for="inp-script_id">Script:</label>
+            <div class="input-group input-group-sm mb-1">
+                <div class="input-group-prepend">
+                    <span class="input-group-text" style="min-width: 180px;"><b>script_id:</b></span>
+                </div>
+                <input type="number" class="form-control" placeholder="" id="inp-script_id" value="1" min="1" step="1" >
+                <div class="input-group-prepend">
+                    <button class="btn btn-outline-secondary" type="button" id="btn-script_id">QUERY</button>
+                </div>
+            </div>
+        </div>
+        <div class="col">
+            <label for="inp-device_id">Device:</label>
+            <div class="input-group input-group-sm mb-1">
+                <div class="input-group-prepend">
+                    <span class="input-group-text" style="min-width: 180px;"><b>device_id:</b></span>
+                </div>
+                <input type="text" class="form-control" placeholder="" id="inp-device_id" value="" >
+                <div class="input-group-prepend">
+                    <button class="btn btn-outline-secondary" type="button" id="btn-device_id">QUERY</button>
+                </div>
+            </div>
+        </div>
+        <div class="col">
+            <label for="inp-datafile_id">DataFile:</label>
+            <div class="input-group input-group-sm mb-1">
+                <div class="input-group-prepend">
+                    <span class="input-group-text" style="min-width: 180px;"><b>datafile_id:</b></span>
+                </div>
+                <input type="number" class="form-control" placeholder="" id="inp-datafile_id" value="1" min="1" step="1" >
+                <div class="input-group-prepend">
+                    <button class="btn btn-outline-secondary" type="button" id="btn-datafile_id">QUERY</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="row container" id="busy" style="display: none;">
+        <div class="container">
+            <div class="loader"></div> 
+        </div>
+        
+    </div>
+    <div class="row">
+        <div class="col-md-auto" id="resultAlertContainer">
+            <div class="container">
+                <div id="resultAlert"></div>
+            </div>
+        </div>
+    </div>
+    <div class="row">
+        <div class="container">
+            <div class="list-group" id="results">
+
+            </div>
+        </div>
+    </div>
 </div>
 
+<script type="text/javascript">
+
+    async function queryAPI(endpoint, kwargs) {
+        var url = endpoint;
+        if (kwargs) {
+            const urlParams = new URLSearchParams(kwargs);
+            url = `${endpoint}?${urlParams}`;
+        }
+
+        console.log(`querying ${url}`);
+
+        try {
+            const response = await fetch(url);
+            if (!response.ok) {
+                throw `response for ${url} is not OK! status_code=${response.status} status_text=${response.statusText}`;
+            }
+            const data = await response.json();
+            return data;
+        } catch (error) {
+            console.error('Error fetching data:', error);
+            throw error; 
+        }
+    }
+
+    document.getElementById("btn-script_id").addEventListener("click", async () => {
+        try {
+            setBusy();
+            const script_id = document.getElementById('inp-script_id').value;
+            const res = await queryAPI('/qryq', {table:'script', id:script_id});
+            handleResult(res, `script_id=${script_id}`);
+        } catch (error) {
+            handleResult(error, key=null, isErr = true);
+        }
+    });
+
+
+    document.getElementById("btn-device_id").addEventListener("click", async () => {
+        try {
+            setBusy();
+            const device_id = document.getElementById('inp-device_id').value;
+            const res = await queryAPI('/qryq', {table:'device', id:device_id});
+            handleResult(res, `device_id=${device_id}`);
+        } catch (error) {
+            handleResult(error, key=null, isErr = true);
+        }
+    });
+
+    document.getElementById("btn-datafile_id").addEventListener("click", async () => {
+        try {
+            setBusy();
+            const datafile_id = document.getElementById('inp-datafile_id').value;
+            const res = await queryAPI('/qryq', {table:'datafile', id:datafile_id});
+            handleResult(res, `datafile_id=${datafile_id}`);
+        } catch (error) {
+            console.error('Error fetching data:', error);
+            handleResult(error, key=null, isErr = true);
+        }
+    });
+
+
+    async function handleResult(res, key=null, isErr=false) {
+        console.log(res);
+        if(isErr) {
+            setAlert('ERROR: ' + String(res));
+            document.getElementById('results').innerHTML = '';
+        } else {
+            const s = `SUCCESS: received N=${res.length} datafiles from server for ${key}`;
+            setAlert(s);
+            const re = document.getElementById('results');
+            re.innerHTML = '';
+            for (let i = 0; i < res.length; i++) {
+                const e = res[i];
+                re.appendChild(datafile2listitem(e));
+            }
+        }
+        stopBusy();
+    }
+
+    function setBusy(){
+        document.getElementById('busy').style.display = 'block';
+    }
+
+    function stopBusy(){
+        document.getElementById('busy').style.display = 'none';
+    }
+
+    function id2lnk(table, id, label=null, asString=true){
+
+        const encodedPath = encodeURIComponent(id);
+        const url = `/${table}/${encodedPath}`;
+        if (asString){
+            return `<a href="${url}">${label ? label : url}</a>`;
+        } else {
+            var a = document.createElement('a');
+            a.href = url;
+            a.innerText = label ? label : url
+            return a
+        }
+    }
+
+    function datafile2listitem(data) {
+        const item = document.createElement('div');
+        item.classList.add('list-group-item', 'align-items-start');
+    
+        const header = document.createElement('div');
+        header.classList.add('d-flex', 'w-100', 'justify-content-between');
+    
+        const title = document.createElement('h5'); 
+    
+        title.classList.add('mb-1');
+
+        var did = `<b>Script ID:</b> ${data.script_id}`;
+        if (data.script_id){
+            did = id2lnk('script', data.script_id, did, asString=true);
+        } 
+
+        var sid = `<b>Device ID:</b> ${data.device_id}`;
+        if (data.device_id){
+            sid = id2lnk('device', data.device_id,  sid, asString=true);
+        }
+
+        var fid = `<b>Datafile ID:</b> ${data.id}`;
+        if (data.id){
+            fid = id2lnk('dafafile', data.id, fid, asString=true);
+        }
+
+        title.innerHTML = `${sid} - ${did} - ${fid}`;
+    
+        const timestamp = document.createElement('small');
+        var s = new Date(data.last_time_changed).toISOString();
+        s = s.replace('T', ' ').replace('Z', ' UTC');
+        timestamp.textContent = 'LTC: ' +  s;
+    
+    
+        header.appendChild(title);
+        header.appendChild(timestamp);
+    
+        const description = document.createElement('p');
+        description.classList.add('mb-1');
+        description.textContent = `Filename: ${data.filename}`;
+    
+        const attributes = document.createElement('div');
+        const details = document.createElement('small');
+        details.textContent = `Status: ${data.status}, MIME Type: ${data.mime_type}, Data Type: ${data.data_type}`;
+        attributes.appendChild(details);
+        
+        attributes.appendChild(document.createElement('hr'));
+        const d = document.createElement('div');
+        d.innerText = 'Storage locations:'
+        attributes.appendChild(d);
+        
+        var found = false;
+        if (data.locations_storage_json) {
+            var ul = document.createElement('ul');
+            for (const loc in data.locations_storage_json) {
+                if (Object.hasOwnProperty.call(data.locations_storage_json, loc)) {
+                    const li = document.createElement('li');
+                    const e = data.locations_storage_json[loc];
+                    const sml2 = document.createElement('small');
+                    const st = document.createElement('strong');
+                    st.textContent = loc + ': ';
+                    sml2.appendChild(st);
+                    li.appendChild(sml2);
+                    if (e.link) {
+                        const sml = document.createElement('small');
+                        const link = document.createElement('a');
+                        link.href = e.link;
+                        link.textContent = e.full_path;
+                        sml.appendChild(link);
+                        li.appendChild(sml);
+                    } else {
+                        
+                        const encodedPath = encodeURIComponent(e.full_path);
+                        const lnk = `/downloadq?path=${encodedPath}`;
+                        const sml = document.createElement('small');
+                        const link = document.createElement('a');
+                        link.href = lnk;
+                        link.textContent = e.full_path;
+                        sml.appendChild(link);
+                        li.appendChild(sml);
+                    }
+                    ul.appendChild(li);
+                    found = true;
+                }
+            }   
+            
+            attributes.appendChild(ul);
+        }
+
+        if (!found) {
+            d.innerText += ' NONE!'
+        }
+
+        item.appendChild(header);
+        item.appendChild(description);
+        item.appendChild(details);
+        item.appendChild(attributes);
+    
+        return item;
+    }
+
+        
+    function matchErrorKeyword(text) {
+    const regex = /error/i; // 'i' flag for case-insensitive matching
+        return regex.test(text);
+    }
+    function matchSuccessKeyword(text) {
+        const regex = /success/i; // 'i' flag for case-insensitive matching
+        return regex.test(text);
+    }
+
+    function setAlert(s, color=null, resObj=null, showSpinner=false) {
+
+        const c = color ? color : (matchErrorKeyword(s) ? 'danger' : (matchSuccessKeyword(s) ? 'success' : 'info'));
+        const s2 = new Date().toISOString() + ' | ' + s;
+
+        if (c =="danger") {
+            console.error(s);
+        } else {
+            console.log(s);
+        }
+
+        const alertElement = document.createElement('div');
+        alertElement.classList.add('alert', `alert-${c}`, 'alert-dismissible', 'fade', 'show');
+        alertElement.role = 'alert';
+        alertElement.textContent = s2;
+        alertElement.style.margin="2px"
+        // alertElement.style.maxHeight='22px'
+        // alertElement.style.overflowX='auto';
+        document.getElementById('resultAlert').innerHTML = '';
+        document.getElementById('resultAlert').appendChild(alertElement);
+        if (showSpinner) {
+            console.log('creating spinner...');
+            document.getElementById('resultAlert').appendChild(createSpinner());
+        }
+    }
+
+
+
+</script>
 
 {% endblock %}

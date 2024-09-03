@@ -44,8 +44,16 @@ def run(script_id):
 
     tend = helpers.get_utcnow()
     td = tend - tstart
+    days = td.days
+    secs = td.seconds
+    hours = secs // 3600
+    secs -= hours * 3600
 
-    log.info(f'run_script with {PID=} and {script_id=} has finished after: {td.days} days, {td.hours:02d}:{td.minutes:02d}:{td.seconds:02d}"')
+    minutes = secs // 60
+    secs -= minutes * 60 
+    seconds = secs
+
+    log.info(f'run_script with {PID=} and {script_id=} has finished after: {days} days, {hours:02d}:{minutes:02d}:{seconds:02d}"')
 
 
 if __name__ == "__main__":
