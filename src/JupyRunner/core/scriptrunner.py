@@ -204,7 +204,7 @@ def run_script(script_id:int):
             log.error(s)
         else:
             # Set script status to FINISHING
-            script.status = STATUS.FINISHED
+            script.status = STATUS.UPLOADING
             script.script_out_path = script.script_out_path.replace(".ipynb", ".html")
             s = f"Script {script.id}: Finished successfully on {make_zulustr(script.time_finished)}"
             log.info(s)
@@ -212,8 +212,12 @@ def run_script(script_id:int):
 
         script = commit(script)
 
-        # full_api.get(f'action/script/{script.id}/trigger_upload')
+        log.info(f'starting uploading {script.id=}')
+        res = full_api.get(f'action/script/{script.id}/trigger_upload')
+        assert res, 'trigger_upload failed!'
 
+        script.status = STATUS.FINISHED
+        log.info(f'finished uploading {script.id=}')
         return script
 
     except Exception as e:
