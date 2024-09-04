@@ -53,7 +53,7 @@ for module in modules:
 for module in modules:
     module.start(config)
 
-serializers = {k:v.start(config) for k, v in serializers.items()}
+serializers = {k:v.start(config) for k, v in serializers.items() if k in config.get('storage_locations')}
 
 log.info('STARTED!')
 
@@ -737,12 +737,77 @@ def qry_get_last_script() -> schema.Script|None:
 
 
 
+@app.get("/action/script/{script_id}/trigger_upload")
+def action_trigger_upload(script_id:int, is_dryrun:int=Query(default=0, description='if this is anything but 0 it will prevent any actual upload form happening')):
+    try:
+        log.info(f'trigger_upload for {script_id=}')
+        
+        script = dbi.get(schema.Script, script_id)
+        if not script:
+            raise HTTPException(status_code=404, detail=f"Script {script_id=} not found in db")
+        
+        path = script.get_script_dir()
+        dir_path = path.lstrip('/')
+        dd = filesys_storage_api.default_dir_data.rstrip('/')
+        relPath = dir_path[len(dd):]
+        
+        assert os.path.exists(dir_path)
+        
+        
+        res = []
+
+        for root, dirs, files in os.walk(dir_path):
+            r = root.replace('\\', '/')
+            if r.startswith(dd):
+                r = r[len(dd):]
+            
+            for file in files:
+                abspath = os.path.join(root, file).replace('\\', '/')
+                p = root + '/' + file
+                
+
+                for key, ser in serializers.items():
+                    if key == 'local':
+                        continue
+                    remote_path = ser.mk_full_path(p).replace('\\', '/')
+
+                    if abspath.endswith('.ipynb'):
+                        html_exporter = nbconvert.HTMLExporter()
+                        html_data, resources = html_exporter.from_filename(abspath)
+                        rp = remote_path[:-len('.ipynb')] + '.html'
+                        uploaded = False
+                        if not is_dryrun:
+                            ser.upload_file_content(rp, html_data.encode(), error_on_exist=False)
+                            uploaded = True
+                        res.append(dict(serializer=key, abspath=abspath, origin=p, remote_path=rp, uploaded=uploaded))
+                        
+                    
+                    uploaded = False
+                    if not is_dryrun:
+                        with open(abspath) as fp:
+                            ser.upload_file_content(remote_path, fp.read(), error_on_exist=False)
+                            uploaded = True
+
+                    res.append(dict(serializer=key, abspath=abspath, origin=p, remote_path=remote_path, uploaded=uploaded))
+
+        return res
+    
+    except Exception as err:
+        if 'HTTP' in str(type(err)):
+            log.exception(err)
+            log.exception(err.res)
+            log.exception(err.res.text)
+        else:
+            log.exception(err)
+        raise
+    
+
 @app.get("/action/kill/{script_int}")
 def kill(script_id:int):
     
     with dbi.se() as session:
 
-        script = session.get(script_id)
+        script = session.get(schema.Script, script_id)
         if script is None:
             raise HTTPException(status_code=404, detail=f"Script {script_id=} not found in db")
         status = script.status
@@ -766,7 +831,7 @@ def cancel(script_id:int):
     
     with dbi.se() as session:
 
-        script = session.get(script_id)
+        script = session.get(schema.Script, script_id)
         if script is None:
             raise HTTPException(status_code=404, detail=f"Script {script_id=} not found in db")
         status = script.status
@@ -793,7 +858,7 @@ def abort(script_id:int):
     
     with dbi.se() as session:
 
-        script = session.get(script_id)
+        script = session.get(schema.Script, script_id)
         if script is None:
             raise HTTPException(status_code=404, detail=f"Script {script_id=} not found in db")
         status = script.status
@@ -893,7 +958,7 @@ def action_script_rerun(script_id:int):
 
         with dbi.se() as session:
             
-            obj = session.get(script_id)
+            obj = session.get(schema.Script, script_id)
             if obj is None:
                 raise HTTPException(status_code=404, detail=f"Script {script_id=} not found in db")
         
