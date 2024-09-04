@@ -136,13 +136,15 @@ class NextcloudAccessor(object):
     def mkdirs(self, d):
         if '/' in d and d != '/':
             ds = os.path.dirname(d)
-            log.info(f'making sub dir: "{ds}"')
-            self.mkdirs(ds)
+            if ds != '/':
+                log.info(f'making sub dir: "{ds}"')
+                self.mkdirs(ds)
         if d == '/':
             return
         
         direxists = True
         try:
+            # print(d)
             res = self.nc.file_info(d)
             direxists = res is not None           
         except nextcloud_client.nextcloud_client.HTTPResponseError as err:
@@ -155,11 +157,11 @@ class NextcloudAccessor(object):
             log.info(f'making dir: "{d}"')
             self.nc.mkdir(d)
 
-    def upload_file_content(self, remote_path:str, file:bytes):
+    def upload_file_content(self, remote_path:str, file:bytes, error_on_exist=True):
         
         log.info(f'upload_NC: -> {remote_path} on {self.nc.url}')
         
-        if self.test_exists(remote_path):
+        if error_on_exist and self.test_exists(remote_path):
             raise FileExistsError(f'file "{remote_path}" already exists @{self.baseurl}. Use update instead of upload!')
     
         dn = os.path.dirname(remote_path)
