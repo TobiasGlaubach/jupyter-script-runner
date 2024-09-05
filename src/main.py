@@ -250,10 +250,22 @@ def get_scripts():
 @app.get("/script/{script_id}")
 def get_script(script_id: int):
     obj = dbi.get(schema.Script, script_id)
-    log.debug(f'{obj.device=}')
     if not obj:
         raise HTTPException(status_code=404, detail="Script not found")
     return obj
+
+# Get a specific script by ID
+@app.get("/script_full/{script_id}")
+def get_script(script_id: int):
+    with dbi.se() as session:
+        obj = session.get(schema.Script, script_id)
+        if not obj:
+            raise HTTPException(status_code=404, detail="Script not found")
+        dc = obj.model_dump()
+        dc['device'] = obj.device.model_dump() if obj.device else {}
+        dc['datafiles'] = [d.model_dump() for d in obj.datafiles]
+
+    return dc
 
 # Create a new script
 @app.post("/script")
