@@ -146,6 +146,8 @@ class Script(SQLModel, table=True):
     errors: str = Field(default='', nullable=False)
     comments: str = Field(default='', nullable=False)
 
+    docs_json: Optional[dict] = Field(sa_column=Column(JSON), default_factory=lambda: {})
+
     papermill_json: Optional[dict] = Field(sa_column=Column(JSON))
     data_json: Optional[dict] = Field(sa_column=Column(JSON), default_factory=lambda: {})
 
@@ -190,7 +192,12 @@ class Script(SQLModel, table=True):
         else:
             return os.path.join(self.get_script_dir(), 'data').replace('\\', '/')
     
-    
+    def get_reports_dir(self):
+        if self.default_data_dir:
+            return self.default_data_dir
+        else:
+            return os.path.join(self.get_script_dir(), 'reports').replace('\\', '/')
+
     def get_script_dir(self):
         assert self.script_out_path, 'no "script_out_path" given yet to get a script folder from!'
         return os.path.dirname(self.script_out_path)
