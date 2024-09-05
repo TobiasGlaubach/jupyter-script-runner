@@ -22,9 +22,11 @@ log = helpers.log
 
 default_dir_data = ''
 default_dir_repo = ''
+default_dir_docs = ''
+
 home = str(Path.home())
 timeformat_str = '%Y%m%d_%H%M'
-
+timeformats_str = '%Y%m%d_%H%M%S'
 
 ################################################################################################
 ################################################################################################
@@ -124,9 +126,10 @@ def is_pathname_valid(pathname: str) -> bool:
 
 
 def setup(config):
-    global default_dir_repo, default_dir_data
+    global default_dir_repo, default_dir_data, default_dir_docs
     default_dir_data = config['pathes']['default_dir_meas']
     default_dir_repo = config['pathes']['default_dir_repo']
+    default_dir_docs = config['pathes']['default_dir_docs']
 
 
     # _log.info(f'         expanduser: "{os.expanduser("~")}"')
@@ -134,12 +137,14 @@ def setup(config):
     log.info(f'                CWD: "{os.getcwd()}"')
     log.info(f'    Writing data to: "{default_dir_data}" can_write={os.access(default_dir_data, os.W_OK)}')
     log.info(f'    Writing repo to: "{default_dir_repo}" can_write={os.access(default_dir_repo, os.W_OK)}')
+    log.info(f'    Writing docs to: "{default_dir_docs}" can_write={os.access(default_dir_docs, os.W_OK)}')
 
 
 def start(config):
         
     mkdir(default_dir_data, verbose=True)
     mkdir(default_dir_repo, verbose=True)
+    mkdir(default_dir_docs, verbose=True)
 
 
 
@@ -201,6 +206,7 @@ def mk_out_dir(dir, is_exp):
     pths.append(mkdir(dir))
     if is_exp:
         pths.append(_mkdir(join(dir, 'data')))
+        pths.append(_mkdir(join(dir, 'reports')))
     return pths
 
 
@@ -210,6 +216,9 @@ def get_script_save_filepath(dtime:datetime.datetime, experiment_id:int, device_
     fullpath = join(fulldir, fname)
     return fullpath
 
+def get_default_doc_name(script_id:int, device_id:str):
+    time = datetime.datetime.utcnow().strftime(timeformats_str)
+    return f'{time}_{script_id}_{device_id}_d_exported_doc'
 
 def get_script_save_dir(dtime:datetime.datetime, experiment_id:int, device_id:str, experiment_name:str, tag:str=None, make_dir=False):
     time = dtime.strftime(timeformat_str)
