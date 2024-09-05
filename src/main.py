@@ -9,6 +9,8 @@ import traceback
 from typing import Annotated, Any, Callable, Dict, List
 import zipfile
 import nbconvert
+import pydocmaker as pyd
+import urllib.parse
 
 from fastapi import FastAPI, Form, HTTPException, Path, Query, Request, Response, UploadFile, File
 from fastapi.responses import HTMLResponse
@@ -47,11 +49,17 @@ serializers = {
     'filesys': local_filesys_api,
 }
 
+serializers_doc = {k:v for k, v in serializers.items()}
+
 for module in modules:
     module.setup(config)
 
 for module in modules:
     module.start(config)
+
+
+redmine_api.setup(config['wiki_uploader'])
+
 
 serializers = {k:v.start(config) for k, v in serializers.items() if k in config.get('storage_locations')}
 
@@ -64,6 +72,7 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Environment(loader=FileSystemLoader("templates"))
 app.mount("/data", StaticFiles(directory=filesys_storage_api.default_dir_data), name="data")  # Assuming a static directory
 app.mount("/repos", StaticFiles(directory=filesys_storage_api.default_dir_repo), name="repos")  # Assuming a static directory
+app.mount("/loose_docs", StaticFiles(directory=filesys_storage_api.default_dir_docs), name="loose_docs")  # Assuming a static directory
 
 # @asynccontextmanager
 # async def lifespan(app: FastAPI):
@@ -655,6 +664,20 @@ async def ids_projectvariable(script_id:int):
             raise HTTPException(status_code=404, detail="script not found")
         return script.datafiles
 
+@app.get("/qry/script/{script_id}/docs")
+async def ids_projectvariable(script_id:int, html:int = Query(default=0, description='anything but 0 and this route will render the doc as HTML instead of returning the JSON representation')):
+    with dbi.se() as session:
+        script = session.get(schema.Script, script_id)
+        if not script:
+            raise HTTPException(status_code=404, detail="script not found")
+        if html:
+            s = '\n'.join([f'<li>{k}: <a href={v}>{v}</a></li>' for k, v in script.docs_json.items()])
+            page = f'<ul>{s}</ul>'
+            return HTMLResponse(content=page, status_code=200)
+        else:
+            return script.docs_json
+    
+    
 @app.get("/qry/script/{script_id}/params")
 async def ids_projectvariable(script_id:int):
     with dbi.se() as session:
@@ -1094,6 +1117,145 @@ async def list_directory(k, directory_path):
             html_content += f"<li>FILE: <a href='/show/{file_path}'>{file_name}</a></li>"
     html_content += "</ul>"
     return Response(html_content, media_type="text/html")
+
+
+@app.get("/doc/example")
+def doc_example(html:int = Query(default=0, description='anything but 0 and this route will render the doc as HTML instead of returning the JSON representation'),
+                short:int = Query(default=0, description='set to 1 and this route will not include any image data')):
+
+    pyd.DocBuilder()
+        
+    doc = pyd.DocBuilder() # basic doc where we always append to the end
+    doc = pyd.DocBuilder()
+    doc.add_chapter('Introduction')
+    doc.add('dummy text which will be added to the introduction')
+    doc.add_kw('verbatim', 'def hello_world():\n   print("hello world!")')
+    doc.add_chapter('Second Chapter')
+    doc.add_kw('markdown', 'This is my fancy `markdown` text for the Second Chapter')
+    if not short:
+        p = 'static/images/minerva.jpg'
+        if os.path.exists(p):
+            with open(p) as fp:
+                doc.add_image(p)
+        else:
+            doc.add_image("https://github.githubassets.com/assets/GitHub-Mark-ea2971cee799.png")
+
+    if html:
+        return HTMLResponse(content=doc.to_html(), status_code=200)
+    else:
+        return doc.dump()
+
+class UploadDocSchema(BaseModel):
+    doc_name: str = ''
+    doc: list[dict]
+    force_overwrite:bool = False
+    page_title:str = ''
+
+
+def handle_new_doc(doc:pyd.DocBuilder, doc_name, dir_rep, page_title, force_overwrite):
+
+    if not os.path.exists(dir_rep):
+        filesys_storage_api.mkdir(dir_rep)
+
+    dc_local = doc.export_all(dir_path=dir_rep, report_name=doc_name)
+    
+    localpath = next((k for k in dc_local if k.endswith('html')), None)
+    
+    baseurl = config.get('globals').get('dbserver_uri')
+    local_url = f'{baseurl}/downloadq?path={urllib.parse.quote(localpath)}'
+
+    rmconfig = config.get('wiki_uploader', {}).get('redmine', {})
+    project_id = rmconfig.get('project_id')
+
+    if rmconfig and redmine_api.redmine and project_id:
+        upload_url = doc.to_redmine_upload(redmine=redmine_api.redmine, 
+                                project_id=project_id,
+                                report_name=doc_name,
+                                page_title=page_title,
+                                force_overwrite=force_overwrite,
+                                verb=True
+                                )
+        upload_info = 'success see result link for the report '
+        uploaded = True
+    else:
+        upload_url = ''
+        upload_info = 'SKIPPED could not upload because any of "rmconfig and redmine_api.redmine and project_id" failed'
+        uploaded = False
+        
+    return {
+        "message": upload_info, 
+        "url": upload_url if upload_url else local_url, 
+        'dir_rep': dir_rep,
+        'local_files': dc_local, 
+        'saved_local': True, 
+        'saved_remotely': uploaded,
+        'local_url': local_url,
+        'upload_url': upload_url
+    }
+
+
+@app.post("/doc/upload")
+async def doc_upload(r: UploadDocSchema) -> Dict[str, Any]:
+    try:
+        docreq = r.model_dump() # await r.json()
+        assert docreq, 'doc can not be empty!'
+        assert docreq.get('doc', [])
+        doc_name = docreq.get('doc_name', '')
+        doc = pyd.DocBuilder(docreq.get('doc', []))
+        if not doc_name:
+            doc_name = filesys_storage_api.get_default_doc_name('0', 'no_device')
+
+        dir_rep = filesys_storage_api.default_dir_docs
+        res = handle_new_doc(doc, doc_name, dir_rep, docreq.get('page_title', ''), docreq.get('force_overwrite', ''))
+        res['ok'] = True
+        return res
+    
+    except Exception as err:
+        log.exception(err)
+        raise
+
+
+
+@app.post("/action/script/{script_id}/upload/doc")
+async def upload_doc_for_script(script_id: int, r: UploadDocSchema) -> Dict[str, Any]:
+    try:
+        docreq = r.model_dump() # await r.json()
+        assert docreq, 'doc can not be empty!'
+        assert docreq.get('doc', [])
+        doc_name = docreq.get('doc_name', '')
+        doc = pyd.DocBuilder(docreq.get('doc', []))
+
+        with dbi.se() as session:
+            script = session.get(schema.Script, script_id)
+            if not script:
+                raise HTTPException(status_code=404, detail="Script not found")
+            
+            
+            if not doc_name:
+                device_id = script.device_id if script.device_id else 'no_device'
+                doc_name = filesys_storage_api.get_default_doc_name(script_id, device_id)
+
+            dir_rep = script.get_reports_dir()
+
+            res = handle_new_doc(doc, doc_name, dir_rep, docreq.get('page_title', ''), docreq.get('force_overwrite', ''))
+            docs_json = script.docs_json
+
+            docs_json[f'local/{doc_name}'] = res.get('local_url', '')
+            if res.get('uploaded', ''):
+                docs_json[f'remote/{doc_name}'] = res.get('upload_url', '')
+                
+            dbi.set_property(schema.Script, script_id, docs_json=docs_json)
+
+        res['script'] = dbi.get(schema.Script, script_id)
+        res['script_id'] = script_id
+        res['ok'] = True
+        return res
+    
+    except Exception as err:
+        log.exception(err)
+        raise
+
+
 
 # # Delete a script
 # @app.delete("/scripts/{script_id}")
