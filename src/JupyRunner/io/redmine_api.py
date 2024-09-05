@@ -5,8 +5,34 @@ from JupyRunner.core import filesys_storage_api, schema, helpers
 
 log = helpers.log
 
+def _get_rm_info(pth):
+    with open(pth, 'r') as fp:
+        key = fp.read().strip()
+    return key
+
+
+
+server = ''
+token = ''
+redmine = None
+
+
 def setup(config):
-    pass
+    global token, server, redmine
+    try:
+        
+        import redminelib
+        config = config.get('storage_locations', config)
+        rm = config.get('redmine', config)
+
+        api_key = _get_rm_info(rm.get('login'))
+        url = rm.get('url')
+        redmine = redminelib.Redmine(url, key=api_key)
+        
+        log.info('Sucessfully connected to redmine')
+    except Exception as err:
+        log.error(err)
+
 
 def start(config):
     return RedmineAccessor(config)
