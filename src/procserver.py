@@ -50,7 +50,7 @@ api = runner.api
 run_directly = config.get('procserver', {}).get('do_direct_running', 0)
 
 commit = runner.commit
-
+set_prop_remote = runner.set_prop_remote
 
 def get_script(script_id:int) -> schema.Script:
     if isinstance(script_id, str):
@@ -87,8 +87,7 @@ def finish(p, id):
         obj.append_error_msg(err)
         log.error('ERROR: ' + err)
         log.debug('setting status: FAILED...' )
-        obj.status = schema.STATUS.FAILED
-        commit(obj)
+        obj = set_prop_remote(id, status = schema.STATUS.FAILED, errors = obj.errors)
 
         s = ''
         s += f'\nFAILED on processing for script {id}'
@@ -134,8 +133,7 @@ def cancle_job(id):
         
         obj = get_script(id)
         obj.append_error_msg(err)
-        obj.status = schema.STATUS.CANCELLED
-        commit(obj)
+        obj = set_prop_remote(obj, status = schema.STATUS.CANCELLED, errors = obj.errors)
         
         del processes[id]
 
@@ -158,7 +156,7 @@ def tick_awaiting_check():
             runner.pre_check(script)
             
             log.debug('actually setting...')
-            runner.prepare_for_run(script)
+            script = runner.prepare_for_run(script)
             stat = schema.STATUS.WAITING_TO_RUN
             log.debug(f'   FROM: {script.script_in_path}')
             log.debug(f'     TO: {script.script_out_path}')
@@ -173,7 +171,7 @@ def tick_awaiting_check():
 
         log.info(f'DONE CHECKING with {script.id} --> {stat}')
 
-        commit(script)
+        script = commit(script)
         
 
 def tick_cancelling():
@@ -194,8 +192,7 @@ def tick_cancelling():
             stat = schema.STATUS.FAULTY
         
         log.debug('setting status... ' + stat)
-        script.status = stat
-        commit(script)
+        script = set_prop_remote(script, status=stat, errors=script.errors)
 
         log.info('DONE CHECKING with ' + str(script))
         
@@ -219,8 +216,7 @@ def tick_cleanup():
             obj.append_error_msg(err_msg=str(err))
             log.exception(f'ERROR while cleaining up {key}, {p}')
             log.exception('ERROR: ' + str(err))
-            obj.status=schema.STATUS.FAULTY
-            commit(obj)
+            set_prop_remote(obj, status=schema.STATUS.FAULTY, errors=obj.errors)
     
     for key in to_remove:
         removed = processes.pop(key)
@@ -238,11 +234,10 @@ def tick_start():
             key = script.id
             if not test_is_running(key) and script.test_for_start_condition():
                 log.info('STARTING PROCESSING for ' + str(script))
-                stat = schema.STATUS.STARTING
-                log.debug('setting status... ' + stat)
-                script.status = stat
-                commit(script)
-
+                log.debug('setting status... ' + schema.STATUS.STARTING)
+                script = set_prop_remote(script, status = schema.STATUS.STARTING)
+                assert script.status == schema.STATUS.STARTING
+                
                 if run_directly:
                     runner.run_script(script.id)
                     log.info('DONE RUNNING with ')
@@ -255,7 +250,7 @@ def tick_start():
             else:
                 log.debug('test_is_running:          ' + str(test_is_running(key)))
                 log.debug('test_for_start_condition: ' + str(script.test_for_start_condition()))
-                stat = script.status
+                
         except Exception as err:
 
             traceback.print_exception(err)
@@ -263,10 +258,13 @@ def tick_start():
             log.error('ERROR: ' + str(err))
             stat = schema.STATUS.FAULTY
             log.error('setting status... ' + stat)
-            script.status = stat
-            commit(script)
+            script = set_prop_remote(script.id, status=stat, errors=script.errors)
+            
+            assert script.status == schema.STATUS.FAULTY, f'status was not set to faulty! but is {script.status=}'
+            script = api.get(script.id)
+            assert script.status == schema.STATUS.FAULTY, f'status was not set to faulty! but is {script.status=}'
 
-        log.debug('tick_start...DONE with script=' + str(script.id))
+        log.debug(f'tick_start...DONE with script={script.id} {script.status=}')
 
     
 
@@ -357,16 +355,28 @@ def run():
 if __name__ == '__main__':
     log.info('STARTING procserver!')
 
-    if sys.argv[-1].lower() == 'debug':
+    if len(sys.argv) >1 and 'debug' in sys.argv[-1].lower():
 
         log.setLevel('DEBUG')
         
+        # dc = {
+        #     # "script_in_path": r"C:\Users\tglaubach\repos\jupyter-script-runner\src\scripts\00_example_script.ipynb".replace('\\', '/'),
+        #     "script_in_path": r"C:\Users\tglaubach\repos\jupyter-script-runner\src\99_startup_testscript.ipynb".replace('\\', '/')
+        #     # ... other script attributes
+        # }
+
+        # api.post(dc)
+
         dc = {
-            "script_in_path": r"C:\Users\tglaubach\repos\jupyter-script-runner\src\scripts\00_example_script.ipynb".replace('\\', '/'),
+            # "script_in_path": r"C:\Users\tglaubach\repos\jupyter-script-runner\src\scripts\00_example_script.ipynb".replace('\\', '/'),
+            "script_in_path": r"C:\Users\tglaubach\repos\jupyter-script-runner\src\scripts\02_example_functional_test.ipynb".replace('\\', '/'),
+            "script_params_json": {
+                "do_upload": 1
+            }
             # ... other script attributes
         }
-
         api.post(dc)
+
         tick()
     else:
         run()
