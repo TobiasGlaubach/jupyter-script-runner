@@ -31,3 +31,7 @@ psutil
 pyncclient
 cryptography
 xmltodict
+
+numpy
+matplotlib
+pandas
