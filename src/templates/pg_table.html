@@ -307,11 +307,13 @@ function loadata() {
                         for (const key in cell) {
                             if (Object.hasOwnProperty.call(cell, key)) {
                                 const lnk = cell[key];
-                                s += `<small><a href="${lnk}" target="_blank" title="${lnk}">${key}</a></small>`;
+                                s += `<li><small><a href="${lnk}" target="_blank" title="${lnk}">${key}</a></small></li>`;
                             }
                         }
                         if (s.length === 0) {
-                            s += '<strong><pre style="color:black;"> NONE </pre></strong>'
+                            s += '<strong><pre style="color:black;"> NONE </pre></strong>';
+                        } else {
+                            s = `<ul>${s}</ul>`;
                         }
                         return gridjs.html(s);
                     }
