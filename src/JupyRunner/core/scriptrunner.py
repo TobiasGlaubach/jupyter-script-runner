@@ -90,6 +90,8 @@ def _pre(script:Script, is_test=False):
     all_params = {'path_to_libs': filesys_storage_api.default_dir_libs, 'dbserver_uri': url, 'url': url}
     all_params.update(script.model_dump())
 
+    assert all_params.get('path_to_libs'), f"'path_to_libs' not found or empty in {all_params=}"
+
     if not is_test and script.device_id:
         all_params['device'] = device_api.get(script.device_id).model_dump()
     else:

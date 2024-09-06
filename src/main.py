@@ -175,7 +175,21 @@ def ping():
             <ul>
                 <li>path: <a href="/files/repo">{filesys_storage_api.default_dir_repo}</a></li>
                 <li>exists: {os.path.exists(filesys_storage_api.default_dir_repo)}</li>
-                <li>can_write: {helpers.can_write(filesys_storage_api.default_dir_data)}</li>
+                <li>can_write: {helpers.can_write(filesys_storage_api.default_dir_repo)}</li>
+            </ul>
+        </li>
+        <li>default_dir_docs:
+            <ul>
+                <li>path: <a href="/files/repo">{filesys_storage_api.default_dir_docs}</a></li>
+                <li>exists: {os.path.exists(filesys_storage_api.default_dir_docs)}</li>
+                <li>can_write: {helpers.can_write(filesys_storage_api.default_dir_docs)}</li>
+            </ul>
+        </li>
+        <li>default_dir_libs:
+            <ul>
+                <li>path: <a href="/files/repo">{filesys_storage_api.default_dir_libs}</a></li>
+                <li>exists: {os.path.exists(filesys_storage_api.default_dir_libs)}</li>
+                <li>can_write: {helpers.can_write(filesys_storage_api.default_dir_libs)}</li>
             </ul>
         </li>
         <li>{template_dir=}</li>
