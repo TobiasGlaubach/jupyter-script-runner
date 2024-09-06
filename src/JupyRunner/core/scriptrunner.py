@@ -86,8 +86,8 @@ def _pre(script:Script, is_test=False):
         log.info(f"Script {script.id}: Converting to dictionary")
     
     assert url, f"ERROR was setup called properly? the dbserver url is None! {url=}"
-
-    all_params = {'path_to_libs': filesys_storage_api.default_dir_libs, 'dbserver_uri': url, 'url': url}
+    path_to_libs = config.get('pathes', {}).get('default_dir_libs')
+    all_params = {'path_to_libs': path_to_libs, 'dbserver_uri': url, 'url': url}
     all_params.update(script.model_dump())
 
     assert all_params.get('path_to_libs'), f"'path_to_libs' not found or empty in {all_params=}"

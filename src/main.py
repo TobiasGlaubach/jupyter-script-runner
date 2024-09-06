@@ -73,6 +73,7 @@ templates = Environment(loader=FileSystemLoader("templates"))
 app.mount("/data", StaticFiles(directory=filesys_storage_api.default_dir_data), name="data")  # Assuming a static directory
 app.mount("/repos", StaticFiles(directory=filesys_storage_api.default_dir_repo), name="repos")  # Assuming a static directory
 app.mount("/loose_docs", StaticFiles(directory=filesys_storage_api.default_dir_docs), name="loose_docs")  # Assuming a static directory
+app.mount("/libs", StaticFiles(directory=filesys_storage_api.de), name="libs")  # Assuming a static directory
 
 # @asynccontextmanager
 # async def lifespan(app: FastAPI):
@@ -180,14 +181,14 @@ def ping():
         </li>
         <li>default_dir_docs:
             <ul>
-                <li>path: <a href="/files/repo">{filesys_storage_api.default_dir_docs}</a></li>
+                <li>path: <a href="/files/loose_docs">{filesys_storage_api.default_dir_docs}</a></li>
                 <li>exists: {os.path.exists(filesys_storage_api.default_dir_docs)}</li>
                 <li>can_write: {helpers.can_write(filesys_storage_api.default_dir_docs)}</li>
             </ul>
         </li>
         <li>default_dir_libs:
             <ul>
-                <li>path: <a href="/files/repo">{filesys_storage_api.default_dir_libs}</a></li>
+                <li>path: <a href="/files/libs">{filesys_storage_api.default_dir_libs}</a></li>
                 <li>exists: {os.path.exists(filesys_storage_api.default_dir_libs)}</li>
                 <li>can_write: {helpers.can_write(filesys_storage_api.default_dir_libs)}</li>
             </ul>
