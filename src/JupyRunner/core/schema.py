@@ -156,6 +156,9 @@ class Script(SQLModel, table=True):
     device: Device | None = Relationship(back_populates="scripts", sa_relationship_kwargs={"lazy": "selectin"})
     datafiles: list["Datafile"] = Relationship(back_populates="script", sa_relationship_kwargs={"lazy": "selectin"})
 
+    def before_commit(self):
+        assert self.id < 1725603466, f'{self.id=} are you trying to commit a timestamp to an id?'
+
     @staticmethod
     def construct(script_in_path, 
                   script_params_json:str|None=None, 
