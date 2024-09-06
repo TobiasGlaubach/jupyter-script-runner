@@ -1276,7 +1276,7 @@ async def upload_doc_for_script(script_id: int, r: UploadDocSchema) -> Dict[str,
             docs_json = script.docs_json
 
             docs_json[f'local/{doc_name}'] = res.get('local_url', '')
-            if res.get('uploaded', ''):
+            if res.get('upload_url', ''):
                 docs_json[f'remote/{doc_name}'] = res.get('upload_url', '')
                 
             dbi.set_property(schema.Script, script_id, docs_json=docs_json)
