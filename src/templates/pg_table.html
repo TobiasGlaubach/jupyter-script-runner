@@ -300,6 +300,24 @@ function loadata() {
                     }
                 },
                 { 
+                    name: 'docs',
+                    formatter: (cell, row) => {
+                        
+                        var s = '';
+                        if (cell.length == 0) {
+                            s += '<strong><pre style="color:black;"> NONE </pre></strong>'
+                        } else {
+                            for (const key in cell) {
+                                if (Object.hasOwnProperty.call(cell, key)) {
+                                    const lnk = cell[key];
+                                    s += `<small><a href="${lnk}" target="_blank" title="${lnk}">${key}</a></small>`;
+                                }
+                            }
+                        }
+                        return gridjs.html(s);
+                    }
+                },
+                { 
                         name: 'start_condition',
                         formatter: (cell, row) => {
                             return gridjs.html(`<div style="font-size: small;">${wrap(cell, 10)}</div>`);
