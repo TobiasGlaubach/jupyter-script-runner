@@ -251,8 +251,16 @@ def script_example():
 
 # Get all scripts
 @app.get("/example/device")
-def device_example(device_id: str = Query(default_factory=lambda : f'dut_{int(time.time())}', description='the device id to assign')):
-    return schema.Device(id=device_id)
+def device_example(device_id: str = Query(default_factory=lambda : f'', description='the device id to assign')):
+    return schema.Device(**{
+      "id": "my_test_device" if not device_id else device_id,
+      "source": "http://my_itop_server.domain",
+      "address": "134.104.22.XX",
+      "connection_protocol": "katcp",
+      "configuration": "001-002-003-v1",
+      "comments": "some example device which is linked to a device with the same name in iTop",
+      "data_json": {'setup_config': {'args':[], 'kwargs': {}}} # data_json allows for any dicts to be stored in the database
+    })
 
 
 # Get all scripts
@@ -1160,11 +1168,7 @@ async def _serve_files(k, base_dir, path):
         raise HTTPException(status_code=404, detail="File or directory not found")
 
 async def list_directory(k, directory_path, recurse_max = 5, is_sub=False, dirlinks=True):
-    try:
-            
-
-        log.debug(f'{k=}, {directory_path=}')
-        
+    try:        
         html_content = ''
         li = lambda x: f'<li style="list-style-type: none;">\n   {x}\n</li>\n'
         ul = lambda x: f'<ul>\n   {x}\n</ul>\n'
@@ -1173,14 +1177,9 @@ async def list_directory(k, directory_path, recurse_max = 5, is_sub=False, dirli
             return li(f'"ERROR PATH TOO LONG: {directory_path}"')
         files = os.listdir(directory_path)
 
-        log.debug(f'  N={len(files)} FILES')
-
         if not is_sub:
             html_content = f"<h2><strong>\"{k}\"</strong> - Directory:</h2>"
-
             post = f'  N={len(files)} sub files and folders'
-            
-
             html_content += '\n\n<ul>\n'
             html_content += li(f'"{directory_path}" ({post})')
             if files:
@@ -1188,7 +1187,6 @@ async def list_directory(k, directory_path, recurse_max = 5, is_sub=False, dirli
             else:
                 html_content += "\n\n</ul>\n\n"
             return html_content
-        
 
         html_content += '<ul>\n'
         for file_name in files:
@@ -1197,7 +1195,6 @@ async def list_directory(k, directory_path, recurse_max = 5, is_sub=False, dirli
             if os.path.isdir(file_path):
                 N = len(os.listdir(file_path))
                 post =  '   (EMPTY)' if N == 0 else ''
-                # post = f'  N={len(subs)} sub files/folders'
                 if dirlinks:
                     html_content += li(f'<a href="/files/{k}/{file_path}">{file_name}</a>')
                 else:
@@ -1206,7 +1203,7 @@ async def list_directory(k, directory_path, recurse_max = 5, is_sub=False, dirli
                 if recurse_max > 0 and N > 0:
                     html_content += await list_directory(k, file_path, recurse_max-1, is_sub=True, dirlinks=dirlinks)
                 if is_sub and recurse_max == 0 and N > 0:
-                    html_content += ul(li('(... N={N} files and folders hidden)'))
+                    html_content += ul(li(f'(... N={N} files and folders hidden)'))
                 if post:
                     html_content += ul(li(post))
             else:
