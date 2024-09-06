@@ -271,6 +271,7 @@ def get_script(script_id: int):
 @app.post("/script")
 def create_script(script: schema.Script) -> schema.Script:
     log.debug('POST /script')
+    assert script.id is None or script.id < 1725603466, f'{script.id=} are you trying to commit a timestamp to an id?'
     res = dbi.commit(script)
     log.debug(f'POST /script -> {res=}')
     return res
@@ -318,15 +319,18 @@ def get_datafile(datafile_id: int):  # Assuming ID is an integer for datafiles
 # Create a new data file
 @app.post("/datafile")
 def create_datafile(datafile: schema.Datafile):
+    assert datafile.id is None or datafile.id < 1725603466, f'{datafile.id=} are you trying to commit a timestamp to an id?'
     return dbi.commit(datafile)
 
 @app.patch("/script/{script_id}")
 async def patch_script(script_id:int, request: Request):
+    assert script_id is None or script_id < 1725603466, f'{script_id=} are you trying to commit a timestamp to an id?'
     return dbi.set_property(schema.Script, script_id, **(await request.json()))
     
 @app.put("/script/{script_id}")
 def put_script(script_id:int, script: schema.Script):
     assert script_id == script.id, f'trying to set a object with mismatching id! {script_id=} vs. {script.id=}'
+    assert script_id is None or script_id < 1725603466, f'{script_id=} are you trying to commit a timestamp to an id?'
     return dbi.commit(script)
 
 @app.patch("/device/{device_id}")
@@ -340,11 +344,13 @@ def put_device(device_id:str, device: schema.Device):
 
 @app.patch("/datafile/{datafile_id}")
 async def patch_datafile(datafile_id:int, request: Request):
+    assert datafile_id is None or datafile_id < 1725603466, f'{datafile_id=} are you trying to commit a timestamp to an id?'
     return dbi.set_property(schema.Datafile, datafile_id, **(await request.json()))
     
 @app.put("/datafile/{datafile_id}")
 def put_datafile(datafile_id:int, datafile: schema.Datafile):
     assert datafile_id == datafile.id, f'trying to set a object with mismatching id! {datafile_id=} vs. {datafile.id=}'
+    assert datafile_id is None or datafile_id < 1725603466, f'{datafile_id=} are you trying to commit a timestamp to an id?'
     return dbi.commit(datafile)
 
 @app.put("/projectvariable/{var_id}")
@@ -819,7 +825,8 @@ def action_trigger_upload(script_id:int, is_dryrun:int=Query(default=0, descript
                     
                     uploaded = False
                     if not is_dryrun:
-                        with open(abspath) as fp:
+                        log.debug(f'Reading from {abspath}')
+                        with open(abspath, 'rb') as fp:
                             ser.upload_file_content(remote_path, fp.read(), error_on_exist=False)
                             uploaded = True
 
@@ -834,6 +841,7 @@ def action_trigger_upload(script_id:int, is_dryrun:int=Query(default=0, descript
             log.exception(err.res.text)
         else:
             log.exception(err)
+        
         raise
     
 
