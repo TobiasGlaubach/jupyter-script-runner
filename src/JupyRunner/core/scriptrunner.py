@@ -6,7 +6,7 @@ import papermill
 import nbconvert
 import os
 
-from JupyRunner.core import schema, api_interface
+from JupyRunner.core import schema, api_interface, filesys_storage_api
 from JupyRunner.core.schema import Script, STATUS
 from JupyRunner.core.helpers import log, get_utcnow, make_zulustr, now_iso
 from JupyRunner.core import helpers_mattermost
@@ -87,7 +87,7 @@ def _pre(script:Script, is_test=False):
     
     assert url, f"ERROR was setup called properly? the dbserver url is None! {url=}"
 
-    all_params = {'dbserver_uri': url, 'url': url}
+    all_params = {'path_to_libs': filesys_storage_api.default_dir_libs, 'dbserver_uri': url, 'url': url}
     all_params.update(script.model_dump())
 
     if not is_test and script.device_id:
@@ -125,8 +125,8 @@ def pre_check(script:Script):
     dummy_script = Script(**script.model_dump())
     dummy_script.id = time.time_ns()
     dummy_script.comments += 'this is a dummy script automatically generated for testing'
-    _pre(dummy_script, is_test=True)
-    return dummy_script
+    res, _ = _pre(dummy_script, is_test=True)
+    return res
 
 def init_follow_up_script(script):
     
@@ -165,8 +165,10 @@ def run_script(script_id:int):
         script, all_params = _pre(script, is_test=False)
         
         log.info(f"Script {script.id}: Running")
+        
+        time.sleep(0.1)
         script = set_prop_remote(script, status = STATUS.RUNNING, time_started = get_utcnow())
-
+        assert script.status == STATUS.RUNNING, 'status was not set to running!'
         
         helpers_mattermost.send_mattermost(f'Script {script.id}: RUNNING with:  {script.script_in_path} (VER:{script.script_version}) -> {script.script_out_path}')
         # Run the script using Papermill
@@ -216,8 +218,10 @@ def run_script(script_id:int):
         res = full_api.get(f'action/script/{script.id}/trigger_upload')
         assert res, 'trigger_upload failed!'
 
-        script.status = STATUS.FINISHED
-        log.info(f'finished uploading {script.id=}')
+        
+        
+        script = set_prop_remote(script.id, status=STATUS.FINISHED)
+        log.info(f'finished uploading {script.id=} {script.status=}')
         return script
 
     except Exception as e:
