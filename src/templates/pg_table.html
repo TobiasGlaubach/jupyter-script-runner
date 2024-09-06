@@ -302,17 +302,16 @@ function loadata() {
                 { 
                     name: 'docs',
                     formatter: (cell, row) => {
-                        
-                        var s = '';
-                        if (cell.length == 0) {
-                            s += '<strong><pre style="color:black;"> NONE </pre></strong>'
-                        } else {
-                            for (const key in cell) {
-                                if (Object.hasOwnProperty.call(cell, key)) {
-                                    const lnk = cell[key];
-                                    s += `<small><a href="${lnk}" target="_blank" title="${lnk}">${key}</a></small>`;
-                                }
+                    
+                    var s = '';
+                        for (const key in cell) {
+                            if (Object.hasOwnProperty.call(cell, key)) {
+                                const lnk = cell[key];
+                                s += `<small><a href="${lnk}" target="_blank" title="${lnk}">${key}</a></small>`;
                             }
+                        }
+                        if (s.length === 0) {
+                            s += '<strong><pre style="color:black;"> NONE </pre></strong>'
                         }
                         return gridjs.html(s);
                     }
