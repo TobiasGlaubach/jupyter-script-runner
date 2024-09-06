@@ -73,7 +73,7 @@ templates = Environment(loader=FileSystemLoader("templates"))
 app.mount("/data", StaticFiles(directory=filesys_storage_api.default_dir_data), name="data")  # Assuming a static directory
 app.mount("/repos", StaticFiles(directory=filesys_storage_api.default_dir_repo), name="repos")  # Assuming a static directory
 app.mount("/loose_docs", StaticFiles(directory=filesys_storage_api.default_dir_docs), name="loose_docs")  # Assuming a static directory
-app.mount("/libs", StaticFiles(directory=filesys_storage_api.de), name="libs")  # Assuming a static directory
+app.mount("/libs", StaticFiles(directory=filesys_storage_api.default_dir_libs), name="libs")  # Assuming a static directory
 
 # @asynccontextmanager
 # async def lifespan(app: FastAPI):
