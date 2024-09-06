@@ -104,7 +104,7 @@ class DATAFILE_TYPE(enum.StrEnum):
 
 class Device(SQLModel, table=True):
     id: str = Field(primary_key=True, unique=True, nullable=False)
-    source: str = Field(nullable=False)
+    source: str = Field(nullable=True)
 
     address: str = Field(default='', nullable=False)
     connection_protocol: str = Field(default='', nullable=False)
