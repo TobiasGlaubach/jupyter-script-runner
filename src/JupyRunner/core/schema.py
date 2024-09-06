@@ -136,7 +136,7 @@ class Script(SQLModel, table=True):
     script_params_json: dict|None = Field(sa_column=Column(JSON), default_factory=get_default_params)
 
     start_condition: datetime.datetime = Field(nullable=False, default_factory=helpers.get_utcnow)
-    end_condition: datetime.datetime = Field(nullable=False, default_factory=lambda : helpers.get_utcnow() + datetime.timedelta(hours=24))
+    end_condition: datetime.datetime = Field(nullable=False, default_factory=lambda : helpers.get_utcnow() + datetime.timedelta(hours=7*24))
 
     time_initiated: datetime.datetime = Field(nullable=False, default_factory=helpers.get_utcnow)
     time_started: Optional[datetime.datetime] = Field(nullable=True, default_factory=helpers.get_utcnow)
@@ -176,7 +176,7 @@ class Script(SQLModel, table=True):
         if start_condition is None:
             start_condition = helpers.get_utcnow()
         if end_condition is None:
-            end_condition = start_condition + datetime.timedelta(hours=24)
+            end_condition = start_condition + datetime.timedelta(hours=7*24)
         
         assert end_condition >= start_condition, f'end condition must be bigger than start condition {start_condition=} {end_condition=}'
 
