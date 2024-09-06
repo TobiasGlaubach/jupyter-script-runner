@@ -23,6 +23,7 @@ log = helpers.log
 default_dir_data = ''
 default_dir_repo = ''
 default_dir_docs = ''
+default_dir_libs = ''
 
 home = str(Path.home())
 timeformat_str = '%Y%m%d_%H%M'
@@ -126,10 +127,11 @@ def is_pathname_valid(pathname: str) -> bool:
 
 
 def setup(config):
-    global default_dir_repo, default_dir_data, default_dir_docs
+    global default_dir_repo, default_dir_data, default_dir_docs, default_dir_libs
     default_dir_data = config['pathes']['default_dir_meas']
     default_dir_repo = config['pathes']['default_dir_repo']
     default_dir_docs = config['pathes']['default_dir_docs']
+    default_dir_libs = config['pathes']['default_dir_libs']
 
 
     # _log.info(f'         expanduser: "{os.expanduser("~")}"')
@@ -138,6 +140,7 @@ def setup(config):
     log.info(f'    Writing data to: "{default_dir_data}" can_write={os.access(default_dir_data, os.W_OK)}')
     log.info(f'    Writing repo to: "{default_dir_repo}" can_write={os.access(default_dir_repo, os.W_OK)}')
     log.info(f'    Writing docs to: "{default_dir_docs}" can_write={os.access(default_dir_docs, os.W_OK)}')
+    log.info(f'    Writing libs to: "{default_dir_libs}" can_write={os.access(default_dir_libs, os.W_OK)}')
 
 
 def start(config):
@@ -145,6 +148,7 @@ def start(config):
     mkdir(default_dir_data, verbose=True)
     mkdir(default_dir_repo, verbose=True)
     mkdir(default_dir_docs, verbose=True)
+    mkdir(default_dir_libs, verbose=True)
 
 
 
