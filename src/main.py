@@ -803,11 +803,11 @@ def action_trigger_upload(script_id:int, is_dryrun:int=Query(default=0, descript
             raise HTTPException(status_code=404, detail=f"Script {script_id=} not found in db")
         
         path = script.get_script_dir()
-        dir_path = path.lstrip('/')
+        dir_path = path.rstrip('/')
         dd = filesys_storage_api.default_dir_data.rstrip('/')
         relPath = dir_path[len(dd):]
         
-        assert os.path.exists(dir_path)
+        assert os.path.exists(dir_path), f'{dir_path=} does not exist for {script_id=}'
         
         
         res = []
@@ -820,7 +820,7 @@ def action_trigger_upload(script_id:int, is_dryrun:int=Query(default=0, descript
             for file in files:
                 abspath = os.path.join(root, file).replace('\\', '/')
                 p = root + '/' + file
-                
+                log.debug(f'uploading {p=} from {abspath=}')
 
                 for key, ser in serializers.items():
                     if key == 'local':
