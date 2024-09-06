@@ -23,19 +23,23 @@ def json_deserializer(obj):
 
 
 def _update_factory(key, expected_o, v):
-    log.debug(f'_update_factory {key=} {type(expected_o)=}, {expected_o=}, {type(v)=} {v=}')
-    if isinstance(v, type(expected_o)) or expected_o is None or type(expected_o) is None:
-        return v
-    elif isinstance(expected_o, datetime.datetime) and isinstance(v, str):
-        dt = helpers.parse_zulutime(v)
-        assert dt, f'failed to parse datetime string: {v}'
-        return dt
-    else:
-        return type(expected_o)(v) # naively try constructing (should work for enum types!)
+    try:
+        log.debug(f'_update_factory {key=} {type(expected_o)=}, {expected_o=}, {type(v)=} {v=}')
+        if isinstance(v, type(expected_o)) or expected_o is None or type(expected_o) is None:
+            return v
+        elif isinstance(expected_o, datetime.datetime) and isinstance(v, str):
+            dt = helpers.parse_zulutime(v)
+            assert dt, f'failed to parse datetime string: {v}'
+            return dt
+        else:
+            return type(expected_o)(v) # naively try constructing (should work for enum types!)
+    except Exception as err:
+        log.error(f'ERROR in _update_factory for {(key, expected_o, v)=}')
+        log.exception(err)
+        raise
+    
 
         
-
-
 
 def _json_deserializer(dc):
     if isinstance(dc, dict):
@@ -258,6 +262,10 @@ def qry_tabledata(t_min, t_max, skipn, n_max, **kwargs):
             else:
                 row['files'] = str(row['files']) + "  files"
 
+
+            row['docs'] = row['docs_json']
+
+
             for k in row.keys():
                 if isinstance(row[k], datetime.datetime):
                     row[k] = helpers.make_zulustr(row[k])
@@ -271,7 +279,7 @@ def qry_tabledata(t_min, t_max, skipn, n_max, **kwargs):
                 elif row[k] is None:
                     row[k] = ''
 
-        columns = 'id device_id script_params_json status script_out_path files start_condition end_condition comments time_finished script_name script_version errors script_in_path'.split()
+        columns = 'id device_id script_params_json status script_out_path files docs start_condition end_condition comments time_finished script_name script_version errors script_in_path'.split()
         rows = [[row.get(c, None) for c in columns] for row in rows]
 
         inp = dict(n=n_max, skip=skipn, start_date=t_min, end_date=t_max)
