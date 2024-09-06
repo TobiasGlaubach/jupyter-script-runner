@@ -110,7 +110,7 @@ class Device(SQLModel, table=True):
     connection_protocol: str = Field(default='', nullable=False)
     configuration: str = Field(default='', nullable=False)
     comments: str = Field(default='', nullable=False)
-    data_json: Optional[dict] = Field(sa_column=Column(JSON))
+    data_json: Optional[dict] = Field(sa_column=Column(JSON), default_factory= lambda : {})
     last_time_changed: datetime.datetime = Field(nullable=False, default_factory=helpers.get_utcnow)
 
     scripts: list["Script"] = Relationship(back_populates="device", sa_relationship_kwargs={"lazy": "selectin"})
