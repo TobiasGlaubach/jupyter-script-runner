@@ -42,7 +42,7 @@ with open('config.yaml', 'r') as fp:
 
 helpers.set_loglevel(config)
 
-modules = [dbi, filesys_storage_api]
+modules = [dbi, filesys_storage_api, scriptrunner]
 serializers = {
     'nextcloud': nextcloud_api,
     'redmine': redmine_api,
@@ -1123,6 +1123,17 @@ async def send_report(path: str, request: Request):
 
     return FileResponse(path)
 
+@app.get("/allfiles")
+@app.get("/allfiles/")
+async def serve_files():
+    s = ''
+    s += await list_directory('repo', filesys_storage_api.default_dir_repo, recurse_max = 10, dirlinks=False)
+    s += await list_directory('libs', filesys_storage_api.default_dir_libs, recurse_max = 10, dirlinks=False)
+    s += await list_directory('loose_docs', filesys_storage_api.default_dir_docs, recurse_max = 10, dirlinks=False)
+    s += await list_directory('data', filesys_storage_api.default_dir_data, recurse_max = 10, dirlinks=False)
+    return Response(s, media_type="text/html")
+
+
 @app.get("/files/data/{path:path}")
 async def serve_files(path: str = ''):
     return await _serve_files('data', filesys_storage_api.default_dir_data, path)
@@ -1131,27 +1142,83 @@ async def serve_files(path: str = ''):
 async def serve_files(path: str = ''):
     return await _serve_files('repo', filesys_storage_api.default_dir_repo, path)
 
+@app.get("/files/libs/{path:path}")
+async def serve_files(path: str = ''):
+    return await _serve_files('libs', filesys_storage_api.default_dir_libs, path)
+
+@app.get("/files/loose_docs/{path:path}")
+async def serve_files(path: str = ''):
+    return await _serve_files('loose_docs', filesys_storage_api.default_dir_docs, path)
+
 async def _serve_files(k, base_dir, path):
     file_path = os.path.join(base_dir, path)
     if os.path.isdir(file_path):
-        return await list_directory(k, file_path)
+        return Response(await list_directory(k, file_path), media_type="text/html")
     elif os.path.isfile(file_path):
         return FileResponse(file_path)
     else:
         raise HTTPException(status_code=404, detail="File or directory not found")
 
-async def list_directory(k, directory_path):
-    files = os.listdir(directory_path)
-    html_content = f"<h2>Directory: {directory_path}</h2>Files:<ul>"
+async def list_directory(k, directory_path, recurse_max = 5, is_sub=False, dirlinks=True):
+    try:
+            
 
-    for file_name in files:
-        file_path = os.path.join(directory_path, file_name)
-        if os.path.isdir(file_path):
-            html_content += f"<li>DIR:  <a href='/files/{k}/{file_path}'>{file_name}</a></li>"
-        else:
-            html_content += f"<li>FILE: <a href='/show/{file_path}'>{file_name}</a></li>"
-    html_content += "</ul>"
-    return Response(html_content, media_type="text/html")
+        log.debug(f'{k=}, {directory_path=}')
+        
+        html_content = ''
+        li = lambda x: f'<li style="list-style-type: none;">\n   {x}\n</li>\n'
+        ul = lambda x: f'<ul>\n   {x}\n</ul>\n'
+
+        if len(directory_path) > 200:
+            return li(f'"ERROR PATH TOO LONG: {directory_path}"')
+        files = os.listdir(directory_path)
+
+        log.debug(f'  N={len(files)} FILES')
+
+        if not is_sub:
+            html_content = f"<h2><strong>\"{k}\"</strong> - Directory:</h2>"
+
+            post = f'  N={len(files)} sub files and folders'
+            
+
+            html_content += '\n\n<ul>\n'
+            html_content += li(f'"{directory_path}" ({post})')
+            if files:
+                html_content += await list_directory(k, directory_path, recurse_max-1, is_sub=True, dirlinks=dirlinks)
+            else:
+                html_content += "\n\n</ul>\n\n"
+            return html_content
+        
+
+        html_content += '<ul>\n'
+        for file_name in files:
+            file_path = os.path.join(directory_path, file_name)
+
+            if os.path.isdir(file_path):
+                N = len(os.listdir(file_path))
+                post =  '   (EMPTY)' if N == 0 else ''
+                # post = f'  N={len(subs)} sub files/folders'
+                if dirlinks:
+                    html_content += li(f'<a href="/files/{k}/{file_path}">{file_name}</a>')
+                else:
+                    html_content += file_name
+
+                if recurse_max > 0 and N > 0:
+                    html_content += await list_directory(k, file_path, recurse_max-1, is_sub=True, dirlinks=dirlinks)
+                if is_sub and recurse_max == 0 and N > 0:
+                    html_content += ul(li('(... N={N} files and folders hidden)'))
+                if post:
+                    html_content += ul(li(post))
+            else:
+                html_content += f'<li style="list-style-type: none;"><a href="/show/{file_path}">{file_name}</a></li>'
+        html_content += "\n\n</ul>\n\n"
+
+    except Exception as err:
+        log.exception(err)
+        html_content += f'<pre>{traceback.format_exception(err)}</pre>'
+
+
+    return html_content
 
 
 @app.get("/doc/example")
