@@ -6,10 +6,186 @@
 {% endblock %}
 
 
+
 {% block content %}
 
+<div class="mb-3" style="margin-left: 10px; margin-right: 10px;">
+    <h3>ADD DEVICE:</h3>
 
-<embed src="/device" class="w-100" style="min-height: 400px; height: 100vh;">
+    <div class="input-group input-group-sm m-3">
+        <textarea class="form-control" id="inpObj" rows="17"></textarea>
+    </div>
+    
+    <div class="input-group input-group-sm m-3">
+        <button id="patchButton" class="btn btn-danger" type="button">UPLOAD</button>
+    </div>
+    
+    <div>
+        <div class="m-3" id="resultContainer">
+            <div id="resultText">
+            </div>
+        </div>
+    </div>
+</div>
+
+
+
+
+
+<div class="mb-3" style="margin-left: 10px; margin-right: 10px;">
+    <h3>Available Devices:</h3>
+    <ul id="device-list" class="list-group"></ul>
+</div>
+
+<script type="text/javascript">
+
+function createListItem(data) {
+  const item = document.createElement('li');
+  item.classList.add('list-group-item');
+
+  const h5 = document.createElement('h4');
+  h5.classList.add('mb-1');
+  h5.textContent = `${data.id}`;
+  item.appendChild(h5);
+  
+  const ul = document.createElement('ul')
+  for (const key in data) {
+    if (Object.hasOwnProperty.call(data, key)) {
+        const attr = data[key];
+        const li = document.createElement('li');
+        const ttl = document.createElement('strong');
+        ttl.innerText = key + ': ';
+        const val = document.createElement('span');
+        val.appendChild(ttl);
+        if (key.includes('json')){
+            const dataJsonDiv = document.createElement('div');
+            dataJsonDiv.classList.add('pre-scrollable');
+            dataJsonDiv.textContent = JSON.stringify(data.data_json, null, 2);
+            val.appendChild(dataJsonDiv);
+        } else {
+            const c = document.createElement('span');
+            c.innerText = attr;
+            val.appendChild(c);
+        }
+        li.appendChild(val);
+        ul.appendChild(li);
         
+    }
+    item.appendChild(ul);
+  }
+  return item;
+}
+
+
+async function fetchDataAndRender() {
+  const response = await fetch('/device');
+  const data = await response.json();
+
+  const listGroup = document.getElementById('device-list');
+  listGroup.innerHTML = '';
+
+  if (data.length <= 0) {
+    listGroup.innerHTML = 'NO DEVICES AVAILABLE!'
+  } else {
+    data.forEach(item => {
+        const listItem = createListItem(item);
+        listGroup.appendChild(listItem);
+    });
+  }
+
+
+}
+
+// Call the function to fetch data and render the list
+fetchDataAndRender();
+
+
+const jsonTextElement = document.getElementById('inpObj');
+const patchButton = document.getElementById('patchButton');
+const resultTextElement = document.getElementById('resultText');
+
+function fetchExampleJson() {
+  fetch('/example/device')
+    .then(response => response.json())
+    .then(data => {
+      jsonTextElement.value = JSON.stringify(data, null, 2);
+    })
+    .catch(error => {
+      console.error('Error fetching example JSON:', error);
+    });
+}
+
+function validateJSON(jsonString) {
+  try {
+    JSON.parse(jsonString);
+    return true;
+  } catch (error) {
+    return false;
+  }
+}
+
+function uploadJSON() {
+  const jsonString = jsonTextElement.value;
+  if (validateJSON(jsonString)) {
+    fetch(`/device/${JSON.parse(jsonString).id}`)
+      .then(response => {
+        if (response.status === 404) {
+            fetch('/device', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: jsonString
+            })
+            .then(response => response.json())
+            .then(data => {
+                fetchDataAndRender();
+                resultTextElement.innerHTML = `
+                <div class="alert alert-success" role="alert">
+                    <div> SUCCESS! </div>
+                    <pre>${JSON.stringify(data, null, 2)}</pre>
+                </div>
+                `;
+                
+            })
+            .catch(error => {
+                console.error('Error uploading JSON:', error);
+                resultTextElement.innerHTML = `
+                <div class="alert alert-danger" role="alert">
+                    Error uploading JSON: ${error.message}
+                </div>
+                `;
+            });
+        } else {
+          resultTextElement.innerHTML = `
+            <div class="alert alert-danger" role="alert">
+              Object with ID "${JSON.parse(jsonString).id}"" already exists.
+            </div>
+          `;
+        }
+      })
+      .catch(error => {
+            resultTextElement.innerHTML = `
+        <div class="alert alert-danger" role="alert">
+            Error checking object existence: ${error}
+        </div>
+        `;
+      });
+  } else {
+    resultTextElement.innerHTML = `
+      <div class="alert alert-danger" role="alert">
+        Invalid JSON format.
+      </div>
+    `;
+  }
+}
+
+// Add event listeners for buttons
+patchButton.addEventListener('click', uploadJSON);
+
+fetchExampleJson();
+
+
+</script>
 
 {% endblock %}
