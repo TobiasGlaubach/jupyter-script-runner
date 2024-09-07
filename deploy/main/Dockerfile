@@ -1,5 +1,8 @@
 FROM python:3.11-slim-buster
 
+USER root
+RUN apt-get update && apt-get install pandoc -y
+
 RUN useradd -r --gid=100 --uid=1000 --create-home --shell /bin/bash jovyan
 
 WORKDIR ~
