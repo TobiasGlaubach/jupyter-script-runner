@@ -41,17 +41,21 @@ services:
       HOME: /home/jovyan
       JUPYTER_TOKEN: "jupyrun"
       SHARED: /home/jovyan/shared
+      PYTHONPATH: "/home/jovyan/shared/libs"
     command: "python3 procserver.py"
     depends_on:
       - jupyrun_db
   
 
   jupyter:
-    image: jupyter/scipy-notebook
-    ports:
+    depends_on:
+        - jupyrun_proc
+    image: jupyrun_proc:latest
+    ports: 
       - "7991:8888"
     volumes:
       - /var/jupyrun/shared:/home/jovyan/shared:rw
     environment:
       JUPYTER_ENABLE_LAB: "yes"
       JUPYTER_TOKEN: "jupyrun"
+      PYTHONPATH: "/home/jovyan/shared/libs"
