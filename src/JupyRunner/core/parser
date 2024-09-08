@@ -1,0 +1,332 @@
+from dataclasses import dataclass, Field
+from typing import Union, Dict, Any, Callable
+import functools
+import ast
+import re
+
+
+
+def _parse_sleep_command(command):
+  """Parses a sleep command and executes the corresponding action.
+
+  Args:
+    command: The sleep command string.
+
+  Raises:
+    ValueError: If the command is invalid.
+  """
+
+  match = re.match(r"^(sleep|wait) (\d+)(s|m|h)$", command.strip())
+  if not match:
+    raise ValueError("Invalid sleep command: {}".format(command))
+
+  action, duration, unit = match.groups()
+  duration = int(duration)
+
+  if unit == "s":
+    sleep_time = duration
+  elif unit == "m":
+    sleep_time = duration * 60
+  elif unit == "h":
+    sleep_time = duration * 60 * 60
+  elif unit == "d":
+    sleep_time = duration * 60 * 60 * 24
+  else:
+    raise ValueError("Invalid unit: {}".format(unit))
+
+  return sleep_time
+
+
+
+
+
+@dataclass(frozen=True)
+class CallAction():
+    kind:str='call'
+    fun:str
+    args:list = Field(default_factory=[])
+    kwargs:dict = Field(default_factory={})
+    result_handler:str = 'keep_local'
+
+    def _run(self):
+            
+        fun, args, kwargs = self.fun
+        
+        if isinstance(fun, str):
+            f = None
+            parts = fun.split('.') # can be methods or similar!
+            while parts:
+                part = parts.pop()
+                if f is None:
+                    f = locals()[part]
+                else:
+                    f = getattr(f, part)
+        else:
+            f = fun
+
+        assert hasattr(self.fun, '__call__'), f'{fun=} (which evaluated to {f=} is not a callable!'
+        return f(*args, **kwargs)
+        
+    def run(self):
+        ret = self._run()
+        return {'error_msg': '', 'call_result': ret}
+
+    
+
+@dataclass(frozen=True)
+class CheckAction():
+    kind:str='check'
+    fun:str
+    expected:str
+    what:str = 'true'
+    abort_on_fail:bool = False
+    negate: bool = False
+    reduction_by:str = 'all'
+    fail_msg:str = None
+    result_handler:str = 'keep_local'
+    args:list = Field(default_factory=[])
+    kwargs:dict = Field(default_factory={})
+
+    def _call(self):
+        return CallAction(fun = self.fun, args=self.args, kwargs=self.kwargs)._run()
+
+
+    def _check(self, actual, expected, what, abort_on_fail, negate, reduction_by, fail_msg):
+        if not 'np' in locals():
+            import numpy as np
+
+        assert isinstance(what, str), f'ERROR: "what" must be of type string but was {type(what)=}, {what=}'
+
+        assert reduction_by is None or isinstance(reduction_by, str), f'ERROR: "reduction_by" must be of type string but was {type(reduction_by)=}, {reduction_by=}'
+        assert fail_msg is None or isinstance(fail_msg, str), f'ERROR: "fail_msg" must be of type string but was {type(fail_msg)=}, {fail_msg=}'
+
+        if expected in locals():
+            e = locals()[expected]
+        else:
+            e = expected
+        
+        if hasattr(e, '__call__'):
+            # must be a function
+            e = e()
+
+        if what == 'true':
+            tester = lambda x: True if x else False
+        elif what in 'eq =='.split():
+            tester = lambda x: x == e
+        elif what in 'l <'.split():
+            tester = lambda x: x < e
+        elif what in 'leq <='.split():
+            tester = lambda x: x <= e
+        elif what in 'g >'.split():
+            tester = lambda x: x > e
+        elif what in 'geq >='.split():
+            tester = lambda x: x >= e
+        elif what in 'geq >='.split():
+            tester = lambda x: x >= e
+        elif what == 'range':
+            tester = lambda x: x >= np.min(e) and x >= np.max(e)
+        elif what == 'in':
+            tester = lambda x: x in e
+        
+        if hasattr(actual, '__len__') and reduction_by:
+            assert isinstance(reduction_by, str), f'ERROR: "reduction_by" must be of type string but was {type(reduction_by)=}, {reduction_by=}'
+            reduction_fun = getattr(np, reduction_by)
+            actual_scaler = reduction_fun(actual)
+        else:
+            actual_scaler = actual
+
+        if fail_msg is None:
+            ee = f'"{expected}" (which evaluated to "{e}")' if e != expected else f'"{e}"'
+            aa = f'"{actual_scaler}" (which was reduced by "{reduction_by}")' if actual_scaler != actual else f'"{actual_scaler}"'
+            fail_msg = f'Check for {aa} against {ee} with {what=} failed'
+        
+        tst = lambda x: not tester(x) if negate else tester
+        
+        if abort_on_fail:
+            assert tst(actual), 'FAIL: ' + fail_msg
+        else:
+            return asserte(tst(actual), 'FAIL: ' + fail_msg)
+
+
+    def _run(self):
+        
+        expected, what, abort_on_fail, negate, reduction_by, fail_msg, result_handler = self.expected, self.what, self.abort_on_fail, self.negate, self.reduction_by, self.fail_msg, self.result_handler
+        
+        result = self._call()
+        
+        if expected is None:
+            assert what is None, f'ERROR {expected=} only works with "what"=="true", but given was {what=}'
+
+        if isinstance(result, dict) and isinstance(expected, dict):
+            keys = list(expected.keys())
+        elif isinstance(result, dict) and not isinstance(expected, dict):
+            keys = list(result.keys())
+        else:
+            err = self._check(actual=result, expected=expected, what=what, abort_on_fail=abort_on_fail, reduction_by=reduction_by, fail_msg=fail_msg)
+        
+        err = ''
+        for k in keys:
+                res = result.get(k, result) if isinstance(result, dict) else result
+                ex = expected.get(k, expected) if isinstance(expected, dict) else expected
+                wht = what.get(k, what) if isinstance(what, dict) else what
+                aof = abort_on_fail.get(k, abort_on_fail) if isinstance(abort_on_fail, dict) else abort_on_fail
+                rb = reduction_by.get(k, reduction_by) if isinstance(reduction_by, dict) else reduction_by
+                fm = fail_msg.get(k, fail_msg) if isinstance(fail_msg, dict) else fail_msg
+                ngt = negate.get(k, negate) if isinstance(negate, dict) else negate
+
+                err += self._check(actual=res, expected=ex, what=wht, abort_on_fail=aof, reduction_by=rb, fail_msg=fm, negate=ngt)
+
+        return {'error_msg': err, 'call_result': result}
+
+
+
+
+@dataclass()
+class TestScaffholding():
+    testcases:list = Field(default_factory=[])
+    on_setup=Field(default_factory=[])
+    on_teardown=Field(default_factory=[])
+    results_global:list=Field(default_factory=[])
+    
+
+
+
+
+
+
+
+    @staticmethod
+    def construct(testcases:dict, on_setup=None, on_teardown=None):
+        if not on_setup:
+            on_setup = []
+        if not on_teardown:
+            on_teardown = []
+
+        assert testcases, f'ERROR: "testcases" is None or empty! {testcases=}'
+        assert isinstance(on_setup, list), f'ERROR: "on_setup" must be of type list but was {type(on_setup)=}, {on_setup=}'
+        assert isinstance(on_teardown, list), f'ERROR: "on_teardown" must be of type list but was {type(on_teardown)=}, {on_teardown=}'
+
+        _ons = [dict2action(oo) for oo in on_setup if oo]
+        _ont = [dict2action(oo) for oo in on_teardown if oo]
+        if isinstance(testcases, list):
+            testcases = {f'Testcase_{i}':v for i, v in enumerate(testcases, 1) if v}
+
+        _tests = {k:TestCaseDefinition.construct(k, v) for k, v in testcases.items() if v}
+        assert _tests, f'ERROR: "testcases" is None or empty! {_tests=}'
+
+        return TestScaffholding(on_setup=_ons, testcases=_tests, on_teardown=_ont)
+
+
+
+@dataclass()
+class TestCaseDefinition():
+    name:str=''
+    actions:list=Field(default_factory=[])
+    before_actions=Field(default_factory=[])
+    after_actions=Field(default_factory=[])
+    description:str=''
+    results_local:list=Field(default_factory=[])
+    args:list = Field(default_factory=[])
+    kwargs:dict = Field(default_factory={})
+
+    @staticmethod
+    def construct(k, dc):
+
+        assert k, f'ERROR: "Testcase" has no key (name / ID)! {k=} {dc=}'
+        assert dc, f'ERROR: "Testcase" is None or empty! {dc=}'
+        assert dc.get('actions'), f'ERROR: "testcase {k}" has no actions!'
+
+
+        kw = {k:v for k, v in dc.items()}
+
+        kw['actions'] = [dict2action(v) for v in dc['actions']]
+        if dc.get('before_actions'):
+            kw['before_actions'] = [dict2action(v) for v in dc['before_actions']]
+        if dc.get('actions'):
+            kw['actions'] = [dict2action(v) for v in dc['actions']]
+
+        name = dc.get('name')
+        kw['name'] = k if not name else f'{k}: {name}'
+        return TestCaseDefinition(**kw)
+
+
+
+
+def dict2action(dc):
+    if isinstance(dc, str) and (dc.strip().startswith('wait') or dc.strip().startswith('sleep')):
+        return CallAction(**{'fun':'time.sleep', 'args': [_parse_sleep_command(dc)]})
+    elif isinstance(dc, str):
+        return CallAction({'fun': lambda *args, **kwargs: ast.literal_eval(dc)})
+    elif dc.get('kind') == "check" or dc.get('fun') and dc.get('what'):
+        # most likely a check object
+        return CheckAction(**dc)
+    elif dc.get('kind') == "call" or dc.get('fun'):
+        return CallAction(**dc)
+    elif dc.get('kind') == "wait" or 'duration_s' in dc:
+        return CallAction(**{'fun':'time.sleep', 'args': [dc.get('duration_s')]})
+    else:
+        raise KeyError(f'unknown input type. Either give "kind" and set it to any of "call", or "check" or give some proper input {dc=}')
+
+
+class colors:
+    HEADER = '\033[95m'
+    OKBLUE = '\033[94m'
+    OKGREEN = '\033[92m'
+    WARNING = '\033[93m'
+    FAIL = '\033[91m'
+    BLACK = '\033[0m'
+    BOLD = '\033[1m'
+    UNDERLINE = '\033[4m'
+
+colors_dc = {
+    'header': colors.HEADER,
+    'blue': colors.OKBLUE,
+    'green': colors.OKGREEN,
+    'warn': colors.WARNING,
+    'red': colors.FAIL,
+    'black': colors.BLACK,
+    'bold': colors.BOLD,
+    'underline': colors.UNDERLINE
+}
+
+_print = print
+
+def print_color(msg, color='red'):
+    if isinstance(color, str):
+        color = colors_dc[color]
+    if print.do_log:
+        print.log.append(msg)
+    _print(f"{color}{msg}{colors.BLACK}")
+
+
+# helper function instead of assert
+def asserte(to_test, message, do_print=True):
+    if not to_test:
+        if do_print:
+            print_color('Testcondition failed. Message: ' + message, 'red')
+        return 'ERROR: ' + message + '\n'
+    else:
+        return ''
+    
+    
+
+
+
+def determine_input_kind(dc):
+    if isinstance(dc, str) and (dc.strip().startswith('wait') or dc.strip().startswith('sleep')):
+        return 'call', {'fun':'time.sleep', 'args': [_parse_sleep_command(dc)]}
+    elif isinstance(dc, str):
+        return 'call', {'fun': lambda *args, **kwargs: ast.literal_eval(dc)}
+    elif dc.get('kind') == "check" or dc.get('fun') and dc.get('what'):
+        # most likely a check object
+        return "check", dc
+    elif dc.get('kind') == "call" or dc.get('fun'):
+        return 'call', dc
+    elif dc.get('kind') == "wait" or 'duration_s' in dc:
+        return 'call', {'fun':'time.sleep', 'args': [dc.get('duration_s')]}
+    else:
+        raise KeyError(f'unknown input type. Either give "kind" and set it to any of "call", or "check" or give some proper input {dc=}')
+
+
+
+
