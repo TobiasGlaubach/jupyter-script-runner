@@ -23,10 +23,10 @@ if __name__ == '__main__':
 from JupyRunner.core import schema, filesys_storage_api
 from JupyRunner.core import scriptrunner as runner
 
-from JupyRunner.core.helpers import get_utcnow, make_zulustr, parse_zulutime, log, set_loglevel
+from JupyRunner.core.helpers import get_utcnow, make_zulustr, parse_zulutime, log, set_loglevel, get_primary_ip
 from JupyRunner.core.helpers_mattermost import send_mattermost
 
-
+my_runner_id = os.environ.get('RUNNER_ID', None)
 
 config =  None
 run_directly = None
@@ -56,6 +56,33 @@ def get_script(script_id:int) -> schema.Script:
     if isinstance(script_id, str):
         script_id = int(script_id)
     return api.get(script_id)
+
+
+def test_shall_I_run_this_script(script, by_ip=False):
+
+    
+    dc = script.data_json
+
+    if by_ip:
+        req_runner_id = dc.get('runner_ip', dc.get('runner_id', None))
+        _my_runner_id = get_primary_ip()
+    else:
+        req_runner_id = dc.get('runner_id', None)
+        _my_runner_id = my_runner_id
+
+    if _my_runner_id is None: # default runner
+        if req_runner_id is None: # no specific runner needed
+            return True # --> can run
+        else:
+            return False # --> specific runner needed
+    else: # specific runner
+        if req_runner_id is None:
+            return False # --> default runner should run the script, not me
+        elif req_runner_id == _my_runner_id:
+            return True # --> yep I am the one who should run this
+        else:
+            return False # --> nope someone else should run this
+
 
 
 
@@ -232,7 +259,11 @@ def tick_start():
     for script in scripts:
         try:
             key = script.id
-            if not test_is_running(key) and script.test_for_start_condition():
+
+            if not test_is_running(key) and \
+                script.test_for_start_condition() and \
+                    (test_shall_I_run_this_script(script) or test_shall_I_run_this_script(script, by_ip=True)):
+                
                 log.info('STARTING PROCESSING for ' + str(script))
                 log.debug('setting status... ' + schema.STATUS.STARTING)
                 script = set_prop_remote(script, status = schema.STATUS.STARTING)
@@ -293,11 +324,19 @@ def startup_testrun():
 
 
 def startup_info():
-    procserver_info = runner.var_api.get('procserver_startinfo')
-    data = {'filesys': filesys_storage_api.get_folderinfo(), 't_started': make_zulustr(get_utcnow()), 'cwd': os.getcwd(), '__file__': __file__}
+    id = 'pc_default_startinfo' if not my_runner_id else f'pc_{my_runner_id}_startinfo'
+    procserver_info = runner.var_api.get(id)
+    data = {
+        'filesys': filesys_storage_api.get_folderinfo(), 
+        't_started': make_zulustr(get_utcnow()), 
+        'cwd': os.getcwd(), 
+        '__file__': __file__,
+        'runner_id': my_runner_id,
+        'ip': get_primary_ip(),
+    }
 
     if procserver_info is None:
-        procserver_info = schema.ProjectVariable(id='procserver_startinfo', data_json={})
+        procserver_info = schema.ProjectVariable(id=id, data_json={})
 
     procserver_info.data_json = data
     runner.var_api.put(procserver_info)
@@ -355,28 +394,22 @@ def run():
 if __name__ == '__main__':
     log.info('STARTING procserver!')
 
+    
+
     if len(sys.argv) >1 and 'debug' in sys.argv[-1].lower():
 
         log.setLevel('DEBUG')
-        
-        # dc = {
-        #     # "script_in_path": r"C:\Users\tglaubach\repos\jupyter-script-runner\src\scripts\00_example_script.ipynb".replace('\\', '/'),
-        #     "script_in_path": r"C:\Users\tglaubach\repos\jupyter-script-runner\src\99_startup_testscript.ipynb".replace('\\', '/')
-        #     # ... other script attributes
-        # }
-
-        # api.post(dc)
-
         dc = {
             # "script_in_path": r"C:\Users\tglaubach\repos\jupyter-script-runner\src\scripts\00_example_script.ipynb".replace('\\', '/'),
             "script_in_path": r"C:\Users\tglaubach\repos\jupyter-script-runner\src\scripts\02_example_functional_test.ipynb".replace('\\', '/'),
-            "script_params_json": {
-                "do_upload": 1
-            }
+            "script_params_json": { "do_upload": 1 }
             # ... other script attributes
         }
         api.post(dc)
-
         tick()
+
+    elif len(sys.argv) > 1:
+        my_runner_id = sys.argv[-1]
+        run()
     else:
         run()

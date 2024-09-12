@@ -109,12 +109,12 @@ def split_flat_dict_into_nested(flat_dict):
 
 def get_primary_ip():
     import socket
-    
+
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     s.connect(("8.8.8.8", 80))  # Connect to a public DNS server
     ip = s.getsockname()[0]
     s.close()
-    return ip
+    return f'{ip}'
 
 def get_sys_id():
     import platform
@@ -189,4 +189,4 @@ def can_write(path):
 
 
 if __name__ == '__main__':
-    print(get_sys_info())
+    print(get_primary_ip())
