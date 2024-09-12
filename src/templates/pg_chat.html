@@ -1,0 +1,371 @@
+
+
+{% extends "base.html" %}
+
+{% block metatags %}
+<title>JupyRunner WebUI - User Feedback</title>
+<meta name="DESCRIPTION" content="JupyRunner webui user feedback">
+
+
+{% endblock %}
+
+
+{% block content %}
+
+
+
+
+<div style="margin-left: 10px; margin-right: 10px;">
+        <h3>User Live Feedback:</h3>
+        <p>Currently Open Requests:</p>
+        <small>
+            <ol id="request_list">
+    
+            </ol>
+        </small>
+
+        <h5><span>Handling Request: <code id="current_id"></code></span> </h5>    
+    <hr>
+
+
+    <div id="history-area" style="height: 70vh; overflow-y: auto; width: 100%;">
+
+    </div>
+    
+    <hr>
+
+
+    <div class="container" id="upload_preview"> 
+
+    </div>
+
+    <div style="position: absolute; bottom: 0; width: 90%; margin: 5px;">
+        <label for="main_inp_grp"><small>Your Feedback:</small></label>
+        <div class="input-group mb-3" id="main_inp_grp">
+            
+            <!-- <div class="input-group-prepend"> -->
+                <!-- <span class="input-group-text">ID:</span> -->
+                
+            <!-- </div> -->
+            <button class="btn btn-info" onclick="fetchRequest()">Next</button>
+            <input type="text" id="request_id" class="form-control" style="display: none;">
+
+            <input type="text" id="message-input" class="form-control" placeholder="Enter your reply">
+            <!-- <input style="display: none;" class="form-control form-control-sm" id="file-input" type="file" name="files" multiple>              
+            <label for="file-input" class="btn btn-outline btn-light">
+                <i class="fa fa-paperclip" title="Attach File"></i>
+            </label> -->
+            <div class="btn-group" role="group" aria-label="Basic example">
+                <button class="btn btn-primary" type="button" onclick="sendReply(true)">Confirm</button>
+                <button class="btn btn-warning" type="button" onclick="sendReply(false)">Cancle</button>
+            </div>    
+        </div>
+    </div>
+
+    
+</div>
+    
+    
+
+<script>
+    var request_id = null;
+    var request_ids_handled = Array();
+
+    function isEmpty(obj) {
+        for (const prop in obj) {
+            if (Object.hasOwn(obj, prop)) {
+            return false;
+            }
+        }
+        return true;
+    }
+
+    function mkEle(to_add, putRight, clr, src){
+        var msg = document.createElement('div');
+        msg.classList = "alert alert-" + clr;
+        if (putRight){
+            msg.style.marginLeft = '20%';
+        } else {
+            msg.style.marginRight = '20%';
+        }
+
+        const element = document.createElement('div');
+        // element.classList.add('feedback-item');
+        
+        const from = document.createElement('small');
+        s = new Date().toISOString().replace('T', ' ').split('.')[0] + ' (UTC)';
+        from.innerHTML = `<small>${s} | From: "${src}"</small>`
+        element.appendChild(from);
+        element.appendChild(document.createElement('br'));
+        to_add.forEach(e => {
+            element.appendChild(e);
+        }); 
+        msg.appendChild(element);
+        return msg;
+    }
+
+    function MsgToElement(message) {
+        const messageElement = document.createElement('p');
+        messageElement.textContent = message;
+        return mkEle([messageElement], false, 'secondary', 'Webpage');
+    }
+
+    function serverMsgToElement(name, data) {
+
+        
+        const headerElement = document.createElement('span');
+        var a = `<b>ID</b>: <code>"${data.id}"</code>`;
+        a += ` <b>Request-Type:</b>: <code>"${data.request_type}"</code>`;
+
+        if (data.script_id) {
+            a += `<b>Script ID:</b>: <code>"${data.script_id}"</code>`;
+        }
+        headerElement.innerHTML = `<small>${a}</small>`;
+
+        const messageElement = document.createElement('p');
+        messageElement.textContent = data.message;
+
+        const parts = [
+            headerElement,
+            document.createElement('br'),
+            document.createElement('br'),
+            messageElement,
+        ];
+
+        return mkEle(parts, false, 'primary', 'Server');
+    }
+
+    function userFeedbackToElement(message, success, N) {
+
+        const color = (success ? 'success' : 'danger');
+
+        const headerElement = document.createElement('span');
+        var a = `<b>ID</b>: <code>"${request_id}"</code>`;
+        const sc = success ? 'SUCCESS' : 'CANCLE'
+        a += ` <b>Feedback</b>: <code>${sc}</code>`;
+        headerElement.innerHTML = '<small>' + a + '</small>';
+        var s = message;
+        if (N) {
+            s += `(with N=${N} Attached)`
+        }
+        const messageElement = document.createElement('p');
+        messageElement.textContent = s ? s: '<<NO MESSAGE TEXT>>';
+
+        const parts = [
+            headerElement,
+            document.createElement('br'),
+            messageElement,
+        ];
+
+        return mkEle(parts, true, color, 'You');
+    }
+
+    
+    function serverReplyToElement(res) {
+        const color = (res.success ? 'success' : 'danger');
+
+        const headerElement = document.createElement('span');
+        var a = `<b>ID</b>: <code>"${res.id}"</code>`;
+        const sc = res.success ? 'OK' : 'ERROR'
+        a += ` <b>Feedback</b>: <code>${sc}</code>`;
+        headerElement.innerHTML = '<small>' + a + '</small>';;
+
+        var s = res.response;
+        const messageElement = document.createElement('p');
+        messageElement.textContent = s;
+
+        const parts = [
+            headerElement,
+            document.createElement('br'),
+            messageElement,
+        ];
+
+        return mkEle(parts, false, color, 'Server');
+    }
+
+
+    async function fetchRequest() {
+        const response = await fetch('/user_feedback/get');
+        const data = await response.json();
+        var found = false;
+        var i = 0;
+
+        var request_list = document.getElementById('request_list');
+        request_list.innerHTML = '';
+        
+        if(!data || data.length < 1 || isEmpty(data)){
+            addToHist(MsgToElement('There are currently no requests for action on the server... please try again later.'));
+            request_id = '';
+            document.getElementById('current_id').innerText = '';
+            return;
+        }
+
+        for (const key in data) {
+            var el = document.createElement('li');
+            var el2 = document.createElement('code');
+            el2.innerText = key;
+            el.appendChild(el2)
+            request_list.appendChild(el);
+        }
+        
+        for (const key in data) {
+            i += 1;
+            if (Object.hasOwnProperty.call(data, key) && !request_ids_handled.includes(key)) {
+                const post = ` request ${i} of ${data.length}`
+                const element = data[key];
+                addToHist(serverMsgToElement(key, element, post));
+                request_id = element.id;
+                document.getElementById('current_id').innerText = request_id;
+                 
+                
+
+                request_ids_handled.push(request_id);
+                found = true;
+                break;
+            }
+        }
+        if(!found){
+            addToHist(MsgToElement('you have reached the end of all available messages... starting from the beginning again.'));
+            request_ids_handled.length = 0;
+            fetchRequest();
+        }
+        
+
+    }
+
+    // function upload() {
+    //         const messageInput = document.getElementById('message-input');
+    //         const fileInput = document.getElementById('file-input');
+    //         const message = messageInput.value;
+
+    //         // Check if an image is pasted
+    //         if (message.startsWith('data:image/')) {
+    //             const data = message.split(';base64,')[1];
+    //             const filename = 'pasted_image.png'; // Adjust filename as needed
+    //             uploadFile(filename, data);
+    //             messageInput.value = '';
+    //         } else {
+    //             // Upload regular files
+    //             if (fileInput.files.length > 0) {
+    //                 uploadFile(fileInput.files[0].name, fileInput.files[0]);
+    //             } else {
+    //                 // Handle case where no file is selected
+    //                 console.error('No file selected');
+    //             }
+    //         }
+    //     }
+
+        // const pasteButton = document.querySelector('#paste-button');
+
+        //     pasteButton.addEventListener('click', async () => {
+        //     try {
+        //         const clipboardItems = await navigator.clipboard.read();
+        //         for (const clipboardItem of clipboardItems) {
+        //             console.log(clipboardItem);
+        //             const imageTypes = clipboardItem.types.find(type => type.startsWith('image/'))
+        //             for (const imageType of imageTypes) {
+        //                 const blob = await clipboardItem.getType(imageType);
+        //                 // Do something with the image blob.
+                        
+        //             }
+        //         }
+        //     } catch (err) {
+        //         console.error(err.name, err.message);
+        //     }
+        // });
+
+        // document.addEventListener('paste', async (e) => {
+        //     e.preventDefault();
+        //     console.log('paste event!', e);
+        //     for (const item of e.clipboardData.items) {
+        //         if (item.type.startsWith('image/')) {
+        //             item.getAsFile().then(file => {
+        //                 console.log('Pasted image:', file);
+        //                 // Do something with the image file.
+        //                 const img = document.createElement('img');
+        //                 img.src = URL.createObjectURL(file);
+        //                 document.getElementById('upload_preview').appendChild(img);
+        //             });
+
+        //         } else {
+        //             console.log('unhandled paste!');
+        //         }
+        //     }
+        // });
+
+
+
+        // document.getElementById('message-input').addEventListener('paste', function(event) {
+        // var clipboardData = event.clipboardData || event.originalEvent.clipboardData;
+        // const pastedImage = clipboardData.items.find(item => item.type.startsWith('image/'));
+
+        // for (let i = 0; i < clipboardData.items.length; i++) {
+        //     const item = clipboardData.items[i];
+        //     if (item.type.startsWith('image/')) {
+        //         item.getAsFile().then(file => {
+        //             // Handle the pasted image file here
+        //             console.log('Pasted image:', file);
+
+        //             // Create an image element and display it in the preview area
+        //             const img = document.createElement('img');
+        //             img.src = URL.createObjectURL(file);
+        //             document.getElementById('upload_preview').appendChild(img);
+        //         });
+        //     }
+        // }
+
+    // });
+
+    // window.addEventListener('history-area', () => {
+    //     const scrollHeight = document.documentElement.scrollHeight;
+    //     const clientHeight = document.documentElement.clientHeight; 
+
+    //     const scrollTop = document.documentElement.scrollTop;
+
+    //     if (scrollTop + clientHeight 
+    //     >= scrollHeight - 100) { // Threshold for triggering load more
+    //         loadMoreData();
+    //     }
+    // });
+
+
+    async function sendReply(success) {
+
+        if(!success) {
+            if (confirm('Are you sure you want to cancle this process?\n(The test script might fail!)') != true) {
+                return;
+            }
+        }
+
+        const message = document.getElementById('message-input').value;
+        // const fileInput = document.getElementById('file-input');
+        const formData = new FormData();
+        
+        formData.append('success', success);
+        formData.append('message', message);
+        formData.append('id', request_id)
+
+        // for (let i = 0; i < fileInput.files.length; i++) {
+        //     formData.append('files', fileInput.files[i]);
+        // }
+        
+        addToHist(userFeedbackToElement(message, success, 0))
+
+        const response = await fetch('/user_feedback/reply', {
+            method: 'POST',
+            body: formData
+        });
+        const data = await response.json();
+        addToHist(serverReplyToElement(data));
+
+    }
+
+    function addToHist(el){
+        const element = document.getElementById('history-area');
+        element.appendChild(el);
+        element.scrollTop = element.scrollHeight;
+    }
+
+    fetchRequest();
+</script>
+{% endblock %}

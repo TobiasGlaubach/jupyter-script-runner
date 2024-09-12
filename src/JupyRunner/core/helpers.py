@@ -2,7 +2,7 @@ import re, os
 import dateutil.parser, datetime, time, logging, sys
 
 
-log_level = logging.INFO
+log_level = logging.DEBUG
 
 
 log = logging.getLogger()
@@ -84,22 +84,6 @@ def parse_zulutime(s:str)->datetime.datetime:
         return None
     
 
-
-def __get_starttime(row):
-    if 'time_started' in row and parse_zulutime(row['time_started']):
-        return parse_zulutime(row['time_started'])
-    elif parse_zulutime(row['start_condition']):
-        return parse_zulutime(row['start_condition'])
-    
-def __get_endtime(row):
-    if 'time_finished' in row and match_zulutime(row['time_finished']):
-        return parse_zulutime(row['time_finished'])
-    elif 'end_condition' in row and parse_zulutime(row['end_condition']):
-        return parse_zulutime(row['end_condition'])
-    else:
-        return parse_zulutime(row['start_condition']) + datetime.timedelta(minutes=30)
-
-
 def split_flat_dict_into_nested(flat_dict):
   """
   Splits a flat dictionary with dotted keys into a nested dictionary.
@@ -121,6 +105,26 @@ def split_flat_dict_into_nested(flat_dict):
       current_dict = current_dict[k]
     current_dict[keys[-1]] = value
   return nested_dict
+
+
+def get_primary_ip():
+    import socket
+
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    s.connect(("8.8.8.8", 80))  # Connect to a public DNS server
+    ip = s.getsockname()[0]
+    s.close()
+    return f'{ip}'
+
+def get_sys_id():
+    import platform
+    import getpass
+    username = getpass.getuser()
+    uname = platform.uname()
+
+    # Build the system information string
+    return f'{uname.node}.{uname.system}.{username}'
+    
 
 
 def get_sys_info():
@@ -182,3 +186,7 @@ def can_write(path):
     """
 
     return os.access(path, os.W_OK)
+
+
+if __name__ == '__main__':
+    print(get_primary_ip())

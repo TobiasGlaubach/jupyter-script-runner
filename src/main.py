@@ -11,6 +11,7 @@ import zipfile
 import nbconvert
 import pydocmaker as pyd
 import urllib.parse
+import asyncio
 
 from fastapi import FastAPI, Form, HTTPException, Path, Query, Request, Response, UploadFile, File
 from fastapi.responses import HTMLResponse
@@ -74,6 +75,10 @@ app.mount("/data", StaticFiles(directory=filesys_storage_api.default_dir_data), 
 app.mount("/repos", StaticFiles(directory=filesys_storage_api.default_dir_repo), name="repos")  # Assuming a static directory
 app.mount("/loose_docs", StaticFiles(directory=filesys_storage_api.default_dir_docs), name="loose_docs")  # Assuming a static directory
 app.mount("/libs", StaticFiles(directory=filesys_storage_api.default_dir_libs), name="libs")  # Assuming a static directory
+
+
+feedback_requests = {}
+feedback_answers = {}
 
 # @asynccontextmanager
 # async def lifespan(app: FastAPI):
@@ -1354,6 +1359,133 @@ async def upload_doc_for_script(script_id: int, r: UploadDocSchema) -> Dict[str,
         log.exception(err)
         raise
 
+
+class UserFeedbackRequest(BaseModel):
+    message: str
+    request_type: str
+    id: str
+    script_id: int|None = None
+
+class UserFeedbackReply(BaseModel):
+    id: str
+    message: str
+    response_type: str
+    files: dict[str, str]|None = None
+
+
+@app.post("/user_feedback/create")
+async def user_feedback_create(req: UserFeedbackRequest)-> Dict[str, Any]:
+
+    id = req.id
+    global feedback_requests, feedback_answers
+    if id in feedback_requests:
+        raise HTTPException(400 , f'request with {id=} already exists!')
+    
+    feedback_requests[id] = req        
+    return {'success': True, 'id': req.id, 'request': feedback_requests.get(id, None)}
+
+@app.get("/user_feedback/get")
+async def user_feedback_get(id = Query(description='The id of the request to wait for', default=None))-> Dict[str, Any]:
+
+    global feedback_requests, feedback_answers
+
+    if id is None:
+        r = {id:feedback_requests.get(id, None) for id in feedback_requests}
+        # if not r:
+        #     id_ = 'dummy_request'
+        #     return {id_: UserFeedbackRequest(id=id_, message='There is currently no request on the server to handle... please check again later', request_type='')}
+        
+        return r
+
+    if not id in feedback_requests:
+        raise HTTPException(404 , f'request with {id=} was not found!')
+    
+    return {'request': feedback_requests.get(id, None), 'answer': feedback_answers.get(id, None)}
+
+
+@app.get("/user_feedback/wait_completed")
+async def user_feedback_wait_completed(id = Query(description='The id of the request to wait for'))-> Dict[str, Any]:
+    raise NotADirectoryError('blocking until ready is currently buggy. Please use a polling mechanism with "/user_feedback/check?id=..." instead')
+    if not id in feedback_requests:
+        raise HTTPException(404 , f'request with {id=} was not found!')
+    
+    while not feedback_answers.get(id, None):
+        time.sleep(1)
+
+    return {'request': feedback_requests.pop(id), 'answer': feedback_answers.pop(id)}
+
+
+
+@app.get("/user_feedback/check")
+async def user_feedback_wait_completed(id = Query(description='The id of the request to wait for'))-> Dict[str, Any]:
+    if not id in feedback_requests:
+        raise HTTPException(404 , f'request with {id=} was not found!')
+    if not id in feedback_answers:
+        return {}
+    else:
+        return {'request': feedback_requests.pop(id), 'answer': feedback_answers.pop(id)}
+
+
+@app.post("/user_feedback/create_and_wait")
+async def user_feedback_create_and_wait(req: UserFeedbackRequest, request: Request)-> Dict[str, Any]:
+    raise NotADirectoryError('blocking until ready is currently buggy. Please use a polling mechanism with "/user_feedback/check?id=..." instead')
+    log.info(f'{request.client} requested {req=} and will wait for it')
+
+    id = req.id
+    global feedback_requests, feedback_answers
+    if id in feedback_requests:
+        raise HTTPException(400 , f'request with {id=} already exists!')
+    feedback_requests[id] = req 
+
+    while not feedback_answers.get(id, None):
+        await asyncio.sleep(1)
+
+    return {'request': feedback_requests.pop(id), 'answer': feedback_answers.pop(id)}
+
+
+@app.post("/user_feedback/reply")
+async def user_feedback_reply(request: Request):#, files: list[UploadFile] = File(...)):
+    
+    global feedback_requests, feedback_answers
+
+    res = False
+    form = await request.form()
+    message = form.get("message")
+    success = form.get("success")
+    id_ = form.get("id")
+
+    client = f'{request.client.host}:{request.client.port}'
+
+    files = []
+    file_names = [file.filename for file in files]
+    s = '"confirmation"' if success else '"cancle"'
+    response_text = f"Received {s} reply.\n\n{message}\n\n"
+    if file_names:
+        response_text += f" and files: {file_names}\n\n"
+    response_text += f' from {client=}'
+
+    input_data = {
+        'message': message,
+        'id': id_, 
+        'success': success, 
+        'files': file_names, 
+        'sender': client,
+        'time': helpers.iso_now(),
+    }
+
+    if id_ in feedback_requests and feedback_answers:
+        response_text += f'\n\nRESULT: The request with ID={id_} is already marked as finished!'
+    elif id_ in feedback_requests:
+        res = True
+        response_text += f'\n\nRESULT: marked request with ID={id_} as finished'
+        feedback_answers[id_] = input_data
+    else:
+        response_text += f'\n\nRESULT: The request with ID={id_} does not exist or nobody is waiting for it any more!'
+    
+
+    
+
+    return {"response": response_text, 'id': id_, 'success': res, 'input_data': input_data}
 
 
 # # Delete a script
