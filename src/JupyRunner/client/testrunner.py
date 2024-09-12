@@ -660,6 +660,9 @@ class TestRunner():
 
     description:str = ''
 
+    t_start:datetime.datetime=None
+    t_end:datetime.datetime=None
+
     log_stdout = True
     has_run = False
 
@@ -727,7 +730,9 @@ class TestRunner():
     def run(self, force_overwrite=False):
         assert not self.has_run or force_overwrite, f'testrunner has already run. Please set force_overwrite to True to allow a rerun'
 
+        
         self.results = []
+        self.t_start = helpers.get_utcnow()
         for i, action in enumerate(self.on_setup, 1):
             self._run(f'on_startup:action_{i}', action)
             if action:
@@ -745,7 +750,9 @@ class TestRunner():
                 name, last_action_result = self.results[-1]
                 assert not last_action_result.error_msg, f'ERROR during teardown! {name=} {last_action_result=}'
 
+        self.t_end = helpers.get_utcnow()
         self.has_run = True
+        
         return self.results
 
         
@@ -790,6 +797,31 @@ class TestRunner():
 
                 
 
+    def pprint(self):
+                
+        print('=' * 100)
+        
+        duration = self.t_end - self.t_start
+        print_color(f'FINISHED!\nTESTED N={len(self.testcases)} testcases between {self.t_start}...{self.t_end} ({duration})', 'bold')
+
+        print('RESULTS:')
+        print('-' * 60)
+
+        err_s = ''
+        for i, test in enumerate(self.testcases):
+            err_s = test.get_errors()
+            if err_s:
+                c = 'red'
+                res = ' --> FAIL!'
+            else:
+                c = 'green'
+                res = ' --> PASS!'
+            
+            line = 'TESTCASE No. {: 4.0f} | {} |> {}'.format(i, test.name.ljust(35), res)
+
+            print_color(line, c)
+
+        print('=' * 100)
 
 
 class colors:
