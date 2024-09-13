@@ -6,7 +6,7 @@ FROM jupyter/scipy-notebook:python-3.11
 RUN PYTHONPATH=. 
 
 USER root
-RUN apt-get update && apt-get install pandoc -y
+RUN apt-get install pandoc -y
 
 
 
