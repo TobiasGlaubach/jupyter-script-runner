@@ -15,6 +15,9 @@ ADD ./requirements.txt /home/jovyan/requirements.txt
 RUN pip3 install -r /home/jovyan/requirements.txt
 
 ADD ./src /home/jovyan
+
+ENV PYTHONPATH /home/jovyan
+
 RUN chmod -R 777 /home/jovyan
 WORKDIR /home/jovyan
 USER ${NB_UID}
