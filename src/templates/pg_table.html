@@ -263,8 +263,8 @@ function loadata() {
                     name: 'status',
                     formatter: (cell, row) => {
                         const errors = sanitizeText(row.cells[i_errors].data);
-
-                        return gridjs.html(`<strong title="ERRORS: ${errors}"><pre style="color:${get_color_from_status(cell)};"> ${cell} </pre></strong>`);
+                        const ttl = errors ? `title="ERRORS: ${errors}"` : ''
+                        return gridjs.html(`<strong ${ttl}><pre style="color:${get_color_from_status(cell)};"> ${cell} </pre></strong>`);
                     }
                 },
                 { 
