@@ -284,7 +284,10 @@ def get_script(script_id: int):
 
 # Get a specific script by ID
 @app.get("/script_full/{script_id}")
-def get_script(script_id: int):
+def rget_script_full(script_id: int):
+    return get_script_full(script_id)
+
+def get_script_full(script_id):
     with dbi.se() as session:
         obj = session.get(schema.Script, script_id)
         if not obj:
@@ -292,9 +295,9 @@ def get_script(script_id: int):
         dc = obj.model_dump()
         dc['device'] = obj.device.model_dump() if obj.device else {}
         dc['datafiles'] = [d.model_dump() for d in obj.datafiles]
-
     return dc
 
+    
 # Create a new script
 @app.post("/script")
 def create_script(script: schema.Script) -> schema.Script:
@@ -838,7 +841,7 @@ def action_trigger_upload(script_id:int, is_dryrun:int=Query(default=0, descript
             
             for file in files:
                 abspath = os.path.join(root, file).replace('\\', '/')
-                p = root + '/' + file
+                p = r + '/' + file
                 uploaders = list(serializers.keys())
                 log.debug(f'uploading {p=} from {abspath=} with {uploaders=}')
 
@@ -865,6 +868,21 @@ def action_trigger_upload(script_id:int, is_dryrun:int=Query(default=0, descript
                         uploaded = True
 
                     res.append(dict(serializer=key, abspath=abspath, origin=p, remote_path=rp, uploaded=uploaded))
+        
+        r = dir_path.replace('\\', '/')
+        if r.startswith(dd):
+            r = r[len(dd):]
+        
+        p = r + '/' + 'metadata.json'
+        abspath = os.path.join(root, 'metadata.json').replace('\\', '/')
+        content = json.dumps(get_script_full(script_id), indent=2, default=schema.json_serial).encode()
+        for key, ser in serializers.items():
+            if key == 'local':
+                continue
+    
+            rp = ser.mk_full_path(p).replace('\\', '/')
+            ser.upload_file_content(rp, content, error_on_exist=False)
+            res.append(dict(serializer=key, abspath=abspath, origin=p, remote_path=rp, uploaded=uploaded))
 
         return {'script_id': script_id, 'is_dryrun': is_dryrun, 'success': True, 'result': res}
     
