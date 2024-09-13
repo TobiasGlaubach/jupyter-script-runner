@@ -225,20 +225,41 @@ class ServerApi(object):
             
 
 
-    def upload_doc(self, doc, report_name='', script_id=None):
-        """Uploads a document to the server.
+    def upload_doc(self, doc, report_name='', force_overwrite=False, page_title=None, script_id=None):
+        """Uploads the document data to the server
+            The json body is constructed as:
+            
+            upload = {
+                "doc_name": doc_name,
+                "doc": self.dump(),
+                "force_overwrite": force_overwrite,
+                "page_title": page_title
+            }
 
         Args:
-            doc (DocBuilder): The document to upload.
-            report_name (str, optional): The name of the uploaded document. Defaults to a timestamp-based name assigned by the backend.
-            script_id (int, optional): The script where this data is associated with or None for a loose document. Defaults to None.
+            url (str): The URL of the endpoint that accepts the document data.
+            doc_name (str, optional): The name of the uploaded document. Defaults to ''.
+            force_overwrite (bool, optional): Whether to overwrite an existing document. Defaults to False.
+            page_title (str, optional): The title of the uploaded document (if applicable). Defaults to ''.
+            requests_kwargs: (dict, optional) with kwargs for requests.post(). Defaults to None.
 
         Returns:
             dict: The JSON response from the server after uploading the document.
-        """
-        url = f'/action/script/{script_id}/upload/doc' if script_id else '/doc/upload'
-        return doc.upload(url, report_name)
 
+        Raises:
+            requests.exceptions.RequestException: If the upload request fails.
+        """
+
+        route = f'/action/script/{script_id}/upload/doc' if script_id else '/doc/upload'
+        
+        upload = {
+            "doc_name": report_name,
+            "doc": doc.dump(),
+            "force_overwrite": force_overwrite,
+            "page_title": page_title
+        }
+
+        return self.api.post(route, json=upload, ret_raw=True).json()
 
     def get_user_feedback(self, msg, request_type='okcancle', script_id=None, request_id=None, t_poll_sec=2.0, verb=0, ret_all=False):
         """
