@@ -97,11 +97,11 @@ class BaseAPIClient:
         return resp
 
 
-    def post(self, endpoint, json=None, headers=None, ret_raw=False):
+    def post(self, endpoint, json=None, headers=None, files=None, ret_raw=False):
         url = self._url(endpoint)
         json = self._json(json)
         log.debug(f'POST: {url} {json=}')
-        response = self.session.post(url, json=json, headers=headers)
+        response = self.session.post(url, json=json, headers=headers, files=files)
         response.raise_for_status()  # Raise an exception for error responses
         if ret_raw: 
             return response
@@ -173,13 +173,13 @@ class ServerApi(object):
             byte_data = byte_data.encode()
         
         if not mimetype:
-            mime, _ = mimetypes.guess_type(filename.split(".")[-1])[0]
+            mime, _ = mimetypes.guess_type(filename.split(".")[-1])
             mimetype = 'application/octet-stream' if mime is None else mime
 
         # Send the request with bytes as a file
         files = {'files': (filename, io.BytesIO(byte_data), mimetype)}
 
-        return self.api.post(route, files=files)
+        return self.api.post(route, files=files, ret_raw=True).json()
             
 
     def upload_files(self, script_id, files:Dict[str, Union[str, bytes]]):
@@ -207,18 +207,21 @@ class ServerApi(object):
         route = f'/action/script/{script_id}/upload/files'
 
         tuples = []
+        if isinstance(files, dict):
+            files = list(files.items())
+
         for filename, byte_data in files:
             if isinstance(byte_data, str):
                 byte_data = byte_data.encode()
             
             # Use the mimetypes module to guess the MIME type
-            mime, _ = mimetypes.guess_type(filename.split(".")[-1])[0]
+            mime, _ = mimetypes.guess_type(filename.split(".")[-1])
             mimetype = 'application/octet-stream' if mime is None else mime
                 
             assert isinstance(byte_data, bytes), 'can only upload bytes or strings to the server!'
             tuples.append((filename, io.BytesIO(byte_data), mimetype))
 
-        return self.api.post(route, files={'files': tuples})
+        return self.api.post(route, files={'files': tuples}, ret_raw=True).json()
             
 
 
