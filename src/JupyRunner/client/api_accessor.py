@@ -225,7 +225,7 @@ class ServerApi(object):
             
 
 
-    def upload_doc(self, doc, report_name='', force_overwrite=False, page_title=None, script_id=None):
+    def upload_doc(self, doc, doc_name='', force_overwrite=False, page_title='', script_id=''):
         """Uploads the document data to the server
             The json body is constructed as:
             
@@ -253,7 +253,7 @@ class ServerApi(object):
         route = f'/action/script/{script_id}/upload/doc' if script_id else '/doc/upload'
         
         upload = {
-            "doc_name": report_name,
+            "doc_name": doc_name,
             "doc": doc.dump(),
             "force_overwrite": force_overwrite,
             "page_title": page_title
@@ -351,8 +351,14 @@ class ServerApi(object):
 
 if __name__ == '__main__': 
 
-    api = ServerApi('http://localhost:8000')
-    result = api.get_user_feedback('Feel free to give any response...', ret_all=True)
-    print(result)
+    import pydocmaker as pyd
+    doc = pyd.DocBuilder()
+    doc.add_md('asnjfabfliabfl')
+     
+    api = ServerApi('http://134.104.78.41:7990')
+    res = api.upload_doc(doc, 'Example_Testrun_1', script_id=16)
+
+    print(res)
+    
     # self = 12
     # print(f'{iso_now()}_{id(self)}_{get_sys_id()}_{get_primary_ip()}')
