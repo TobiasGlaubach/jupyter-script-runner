@@ -1,7 +1,7 @@
 # FROM ubuntu
 # FROM python:3.8-slim-buster
 # FROM jupyter/scipy-notebook
-FROM jupyter/scipy-notebook
+FROM jupyter/scipy-notebook:python-3.11
 
 RUN PYTHONPATH=. 
 
