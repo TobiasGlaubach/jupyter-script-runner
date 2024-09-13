@@ -134,11 +134,7 @@ class NextcloudAccessor(object):
         #     return self._upload(datafile, file)
     
     def mkdirs(self, d):
-        if '/' in d and d != '/':
-            ds = os.path.dirname(d)
-            if ds != '/':
-                log.info(f'making sub dir: "{ds}"')
-                self.mkdirs(ds)
+
         if d == '/':
             return
         
@@ -150,11 +146,18 @@ class NextcloudAccessor(object):
         except nextcloud_client.nextcloud_client.HTTPResponseError as err:
             if err.status_code == 404:
                 direxists = False
+                log.debug(f'dir with path {d=} does not exist!')
             else:
                 raise  
 
         if not direxists:
             log.info(f'making dir: "{d}"')
+            if '/' in d and d != '/':
+                ds = os.path.dirname(d)
+            if ds != '/':
+                log.info(f'making sub dir: "{ds}"')
+                self.mkdirs(ds)
+                
             self.nc.mkdir(d)
 
     def upload_file_content(self, remote_path:str, file:bytes, error_on_exist=True):
