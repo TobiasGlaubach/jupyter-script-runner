@@ -47,7 +47,7 @@ modules = [dbi, filesys_storage_api, scriptrunner]
 serializers = {
     'nextcloud': nextcloud_api,
     'redmine': redmine_api,
-    'filesys': local_filesys_api,
+    'local': local_filesys_api,
 }
 
 serializers_doc = {k:v for k, v in serializers.items()}
@@ -463,10 +463,10 @@ async def action_script_upload_many(script_id:int, files: list[UploadFile] = Fil
 
 @app.post("/action/script/{script_id}/upload_data")
 async def action_script_upload_many(script_id, file: UploadFile = File(...)):
-    return _action_script_upload_many(script_id, [file])
+    return await _action_script_upload_many(script_id, [file])
 
 
-def _action_script_upload_many(script_id:int, files: list[UploadFile] = File(...)):
+async def _action_script_upload_many(script_id:int, files: list[UploadFile] = File(...)):
     log.info(f'received upload request for N={len(files)} files to script_id={script_id}')
     with dbi.se() as session:
         script = session.get(schema.Script, script_id)
@@ -481,19 +481,19 @@ def _action_script_upload_many(script_id:int, files: list[UploadFile] = File(...
             obj = dbi.add_to_db(session, dtaf)
             datafile_objs.append(obj)
 
-    kwargs = _upload_and_register_files(datafile_objs, files)
+    kwargs = await _upload_and_register_files(datafile_objs, files)
 
     with dbi.se() as session:
         for dfi_id, kw in kwargs.items():
             dbi.set_propert_sub(session, schema.Datafile, dfi_id, **kw)
 
 
-    return 
+    return {'success': True, 'script_id': script_id, 'filenames': [f for f in files]}
 
 
 @app.post("/action/datafile/upload_many")
 async def action_urf_many(datafile_objs: Dict[str, schema.Datafile], files: list[UploadFile] = File(...)):
-    return _upload_and_register_files(datafile_objs, files)
+    return await _upload_and_register_files(datafile_objs, files)
 
 
 @app.post("/action/upload_data_many_js")
@@ -565,7 +565,8 @@ async def upload_files_for_script(script_id: int, files: Annotated[
             ret.append(dfa_new)
 
         return {"message": "Data file uploaded successfully", "success": True, "result": ret}
-    
+    except FileExistsError as err:
+        return {"message": str(err), "success": False, "result": None}
     except Exception as err:
         log.exception(err)
         raise
@@ -642,8 +643,10 @@ async def _upload_and_register_files(datafile_objs: Dict[str, schema.Datafile], 
                 log.info(f'testing serializer {k} on {datafile}')
 
                 if v.test_should_upload(datafile):
-                    log.info(f'serializer "{k}" matched for {datafile}')
+                    log.info(f'serializer "{k}" matched for "{datafile}"')
                     dfa = await v.upload(datafile, content_bts)
+                else:
+                    log.info(f'serializer "{k}" DID NOT MATCH for "{datafile}"')
 
 
             if dfa is None:
@@ -663,6 +666,9 @@ async def _upload_and_register_files(datafile_objs: Dict[str, schema.Datafile], 
                 'data_type': datafile.data_type,
                 'mime_type': datafile.mime_type
             }
+
+        except FileExistsError as e:
+            raise
 
         except Exception as e:
             log.exception(e)
@@ -833,34 +839,34 @@ def action_trigger_upload(script_id:int, is_dryrun:int=Query(default=0, descript
             for file in files:
                 abspath = os.path.join(root, file).replace('\\', '/')
                 p = root + '/' + file
-                log.debug(f'uploading {p=} from {abspath=}')
+                uploaders = list(serializers.keys())
+                log.debug(f'uploading {p=} from {abspath=} with {uploaders=}')
 
                 for key, ser in serializers.items():
                     if key == 'local':
                         continue
                     remote_path = ser.mk_full_path(p).replace('\\', '/')
 
+                    uploaded = False
                     if abspath.endswith('.ipynb'):
                         html_exporter = nbconvert.HTMLExporter()
                         html_data, resources = html_exporter.from_filename(abspath)
                         rp = remote_path[:-len('.ipynb')] + '.html'
-                        uploaded = False
-                        if not is_dryrun:
-                            ser.upload_file_content(rp, html_data.encode(), error_on_exist=False)
-                            uploaded = True
-                        res.append(dict(serializer=key, abspath=abspath, origin=p, remote_path=rp, uploaded=uploaded))
                         
-                    
-                    uploaded = False
-                    if not is_dryrun:
+                        content = html_data.encode()
+                    else:
                         log.debug(f'Reading from {abspath}')
+                        rp = remote_path
                         with open(abspath, 'rb') as fp:
-                            ser.upload_file_content(remote_path, fp.read(), error_on_exist=False)
-                            uploaded = True
+                            content = fp.read()
 
-                    res.append(dict(serializer=key, abspath=abspath, origin=p, remote_path=remote_path, uploaded=uploaded))
+                    if not is_dryrun:
+                        ser.upload_file_content(rp, content, error_on_exist=False)
+                        uploaded = True
 
-        return res
+                    res.append(dict(serializer=key, abspath=abspath, origin=p, remote_path=rp, uploaded=uploaded))
+
+        return {'script_id': script_id, 'is_dryrun': is_dryrun, 'success': True, 'result': res}
     
     except Exception as err:
         if 'HTTP' in str(type(err)):
