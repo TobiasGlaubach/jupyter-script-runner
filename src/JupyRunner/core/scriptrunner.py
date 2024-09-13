@@ -217,8 +217,9 @@ def run_script(script_id:int):
         script = commit(script)
 
         log.info(f'starting uploading {script.id=}')
-        res = full_api.get(f'action/script/{script.id}/trigger_upload')
-        assert res, 'trigger_upload failed!'
+        res = full_api.get(f'action/script/{script.id}/trigger_upload', params={'is_dryrun': 0})
+        
+        assert isinstance(res, dict) and res.get('success', False), f'trigger_upload for {script.id=} failed! {res=}'
 
         
         
