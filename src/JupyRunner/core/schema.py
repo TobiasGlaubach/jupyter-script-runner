@@ -1,6 +1,6 @@
 import enum, json, datetime
 import hashlib
-import os
+import os, sys
 import re
 
 
@@ -37,6 +37,7 @@ STATUS_MEAS_DICT = {
     "EMPTY": 2000
 }
 
+helpers.log.info(f'Running on python {sys.version_info=}')
 
 class STATUS(enum.StrEnum):
     """
