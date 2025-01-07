@@ -39,18 +39,29 @@
 
     <hr>
 
-    <div class="">
+    <div class="container">
         <div class="row justify-content-md-left" style="width: 100%;">
-            <div class="col-md-auto">
-                <a id="qry-url" href=""></a>
-            </div>
-            <div class="col-md-auto">
-                <pre id="query-text"></pre>
-            </div>
-            <div class="col-md-auto">
-                <span id="query-result"></span>
+            <div class="input-group input-group-sm mb-3">
+                <button onclick="toggleVisibility()" id="btn-showhide" class="btn btn-primary" type="button">Show Query Code</button>
+                <div class="input-group-prepend"><span class="input-group-text">
+                    <a id="qry-url" href=""></a></span>
+                </div>
+                <div class="col-md-auto">
+                    <span id="query-result"></span>
+                </div>
             </div>
         </div>
+    </div>
+
+    <div class="">
+
+
+
+            <div class="col-md-auto">
+                <pre id="query-text" style="display: none;"></pre>
+            </div>
+
+        
     </div>
 
     <hr>
@@ -200,6 +211,34 @@ function refresh() {
     window.location.search = searchParams.toString();
 }
 
+function toggleVisibility() {
+    var element = document.getElementById('query-text');
+    if (element.style.display === 'none') {
+        element.style.display = 'block';
+        getElementById('btn-showhide').innerText = 'Hide Query Code';
+    } else {
+        element.style.display = 'none';
+        getElementById('btn-showhide').innerText = 'Show Query Code';
+    }
+}
+
+function formatTimeDiff(timeDiff) {
+  const seconds = Math.floor(Math.abs(timeDiff) / 1000);
+ const minutes = Math.floor(seconds / 60);
+ const hours = Math.floor(minutes / 60);
+ const days = Math.floor(hours / 24);
+
+ if (days > 0) {
+    return `${days} day${days > 1 ? 's' : ''} ${timeDiff > 0 ? 'from now' : 'ago'}`;
+ } else if (hours > 0) {
+    return `${hours} hour${hours > 1 ? 's' : ''} ${timeDiff > 0 ? 'from now' : 'ago'}`;
+ } else if (minutes > 0) {
+    return `${minutes} minute${minutes > 1 ? 's' : ''} ${timeDiff > 0 ? 'from now' : 'ago'}`;
+ } else {
+    return `${seconds} second${seconds > 1 ? 's' : ''} ${timeDiff > 0 ? 'from now' : 'ago'}`;
+ }
+}
+
 // assumes: 
 // id device_id script_params_json status script_out_path files start_condition end_condition comments time_finished script_name script_version errors script_in_path
 function loadata() {
@@ -321,13 +360,17 @@ function loadata() {
                 { 
                         name: 'start_condition',
                         formatter: (cell, row) => {
-                            return gridjs.html(`<div style="font-size: small;">${wrap(cell, 10)}</div>`);
+                            const dt = formatTimeDiff(new Date(cell) - new Date());
+                            const s = `<div style="font-size: small;">${wrap(cell, 10)}\n(${wrap(dt, 10)})</div>`
+                            return gridjs.html(s);
                         }
                 },
                 { 
                         name: 'end_condition',
                         formatter: (cell, row) => {
-                            return gridjs.html(`<div style="font-size: small;">${wrap(cell, 10)}</div>`);
+                            const dt = formatTimeDiff(new Date(cell) - new Date());
+                            const s = `<div style="font-size: small;">${wrap(cell, 10)}\n(${wrap(dt, 10)})</div>`
+                            return gridjs.html(s);
                         }
                 },
                 { 
@@ -338,9 +381,16 @@ function loadata() {
                             return gridjs.html(`<div data-toggle="tooltip" data-placement="top" title="${ttl}" style="font-size: small;">${s}</div>`)
                         }
                 },
-
-                'time_finished',
+                { 
+                    name: 'time_finished',
+                    formatter: (cell, row) => {
+                        const dt = formatTimeDiff(new Date(cell) - new Date());
+                        const s = `<div style="font-size: small;">${wrap(cell, 10)}\n(${wrap(dt, 10)})</div>`
+                        return gridjs.html(s);
+                    }
+                },
                 {
+                    
                     
                     name: 'script_name',
 
@@ -409,7 +459,10 @@ function setAlert(s, color=null) {
     alertElement.classList.add('alert', `alert-${c}`, 'alert-dismissible', 'fade', 'show');
     alertElement.role = 'alert';
     alertElement.textContent = new Date().toISOString() + ' | ' + s;
-    alertElement.style.margin="2px"
+    alertElement.style.height = '18px';
+    alertElement.style.backgroundColor = 'transparent';
+    alertElement.style.border = '0px';
+    // alertElement.style.margin="2px"
     // alertElement.style.maxHeight='22px'
     // alertElement.style.overflowX='auto';
 
