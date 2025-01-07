@@ -6,9 +6,12 @@ import papermill
 import nbconvert
 import os
 
+import yaml
+
 from JupyRunner.core import schema, api_interface, filesys_storage_api
 from JupyRunner.core.schema import Script, STATUS
 from JupyRunner.core.helpers import log, get_utcnow, make_zulustr, now_iso
+from JupyRunner.core.helpers_mattermost import send_mattermost, LOGGING_EMOJIES
 from JupyRunner.core import helpers_mattermost
 
 import traceback
@@ -23,13 +26,19 @@ device_api = None
 
 def send_mattermost_failed(script:Script, err: Exception):
     s = ''
-    s += f'\nFAILED on post processing for script {script.id=} and {script.script_out_path=}'
+    s += f'\nFAILED on processing for script {script.id=} and {script.script_out_path=}'
     s += f'\nError Message: ```{str(err)}```'
     s += f'\nSTATUS NEW: **FAILED**'
-    helpers_mattermost.send_mattermost(s)
+    send_mattermost(s, emoji=LOGGING_EMOJIES.FAILED)
 
 def send_mattermost_status(script:Script):
-    helpers_mattermost.send_mattermost(f'{script.id=} {script.status=}')
+    if script.is_failed():
+        e = LOGGING_EMOJIES.FAIL
+    elif script.status == STATUS.FINISHED:
+        e = LOGGING_EMOJIES.SUCCESS
+    else:
+        e = LOGGING_EMOJIES.EMPTY
+    send_mattermost(f'{script.id=} {script.status=}', emoji = e)
 
 def setup(cnfg):
     api_interface.setup(cnfg)
@@ -166,13 +175,20 @@ def run_script(script_id:int):
 
         script, all_params = _pre(script, is_test=False)
         
+        p_path = os.path.join(script.get_script_dir(), 'parameters.yaml')
+        
+        # Write all_params as a yaml file to the path given in p_path
+        with open(p_path, 'w') as file:
+            yaml.dump(all_params, file)
+
         log.info(f"Script {script.id}: Running")
         
         time.sleep(0.1)
         script = set_prop_remote(script, status = STATUS.RUNNING, time_started = get_utcnow())
         assert script.status == STATUS.RUNNING, 'status was not set to running!'
         
-        helpers_mattermost.send_mattermost(f'Script {script.id}: RUNNING with:  {script.script_in_path} (VER:{script.script_version}) -> {script.script_out_path}')
+        send_mattermost(f'Script {script.id}: RUNNING with:  {script.script_in_path} (VER:{script.script_version}) -> {script.script_out_path}', emoji=LOGGING_EMOJIES.INFO)
+
         # Run the script using Papermill
         nb = papermill.execute_notebook(
             script.script_in_path,
@@ -212,7 +228,7 @@ def run_script(script_id:int):
             script.script_out_path = script.script_out_path.replace(".ipynb", ".html")
             s = f"Script {script.id}: Finished successfully on {make_zulustr(script.time_finished)}"
             log.info(s)
-            helpers_mattermost.send_mattermost(s)
+            send_mattermost(s, emoji=LOGGING_EMOJIES.SUCCESS)
 
         script = commit(script)
 
