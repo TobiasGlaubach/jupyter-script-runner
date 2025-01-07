@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 import datetime
 import json
 import os
+
 import subprocess
 import time
 import traceback
@@ -30,7 +31,6 @@ import JupyRunner
 
 
 
-import yaml
 
 log = helpers.log
 
@@ -38,10 +38,7 @@ t_started = helpers.get_utcnow()
 template_dir = ''
 static_dir = ''
 
-with open('config.yaml', 'r') as fp:
-    config = yaml.safe_load(fp)
-
-helpers.set_loglevel(config)
+config = helpers.load_config()
 
 modules = [dbi, filesys_storage_api, scriptrunner]
 serializers = {
@@ -1556,6 +1553,7 @@ async def user_feedback_reply(request: Request):#, files: list[UploadFile] = Fil
 #         session.commit()
 #         return {"message": "Project variable deleted successfully"}
     
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)

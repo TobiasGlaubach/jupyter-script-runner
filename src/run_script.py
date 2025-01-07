@@ -23,12 +23,8 @@ def run(script_id):
     tstart = helpers.get_utcnow()
 
     PID = os.getpid()
-    
 
-    with open('config.yaml', 'r') as fp:
-        config = yaml.safe_load(fp)
-
-    helpers.set_loglevel(config)
+    config = helpers.load_config()
 
     log.info(f'run_script with {PID=} and {script_id=} is starting')
     
