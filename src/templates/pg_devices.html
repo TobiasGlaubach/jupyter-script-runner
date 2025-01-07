@@ -48,7 +48,7 @@ function createListItem(data) {
   h5.textContent = `${data.id}`;
   item.appendChild(h5);
   
-  const ul = document.createElement('ul')
+  const ul = document.createElement('ul');
   for (const key in data) {
     if (Object.hasOwnProperty.call(data, key)) {
         const attr = data[key];
@@ -73,6 +73,25 @@ function createListItem(data) {
     }
     item.appendChild(ul);
   }
+
+  
+  copyJsonBtn = document.createElement('button');
+  copyJsonBtn.classList = ['btn', 'btn-danger'];
+
+    copyJsonBtn.innerText = 'Copy to Clipboard as JSON';
+    copyJsonBtn.addEventListener('click', () => {
+    const jsonStr = JSON.stringify(data, null, 2);
+
+    navigator.clipboard.writeText(jsonStr)
+        .then(() => {
+        console.log('JSON copied to clipboard');
+        })
+        .catch((err) => {
+        console.error('Error copying JSON to clipboard:', err);
+        });
+    });
+  item.appendChild(copyJsonBtn);
+
   return item;
 }
 
@@ -92,9 +111,8 @@ async function fetchDataAndRender() {
         listGroup.appendChild(listItem);
     });
   }
-
-
 }
+
 
 // Call the function to fetch data and render the list
 fetchDataAndRender();
