@@ -1,6 +1,7 @@
 
 import requests
 import socket
+import enum
 
 from JupyRunner.core.helpers import get_utcnow, make_zulustr, parse_zulutime, log
 
@@ -15,12 +16,28 @@ def setup(config):
 def start(config):
     pass
 
-def send_mattermost(subject):
+
+def setup(config):
+    global url
+    url = config['globals']['mattermost_uri']
+    
+
+def start(config):
+    pass
+
+class LOGGING_EMOJIES(enum.auto):
+    WARNING = ':warning: '
+    FAIL = ':x: '
+    SUCCESS = ':white_check_mark: '
+    INFO = ':information_source: '
+    EMPTY = ''
+
+
+def send_mattermost(subject, emoji = ''):
 
     try:
 
-
-        s = f'```{make_zulustr(get_utcnow())} | {send_mattermost.hostname} | {send_mattermost.ip} | ```'
+        s = f'{emoji}```{make_zulustr(get_utcnow())} | {send_mattermost.hostname} | {send_mattermost.ip} | ```'
         txt = s + subject
 
         if not url:
@@ -34,9 +51,9 @@ def send_mattermost(subject):
 
             if response.status_code != 200:
                 log.error(f'send_mattermost failed with status_code: {response.status_code} | text: {response.text}')
-
     except Exception as err:
         log.error(f'send_mattermost failed with exception: {err.__repr__()}')
+    
     
 send_mattermost.hostname = socket.gethostname()
 send_mattermost.ip = socket.gethostbyname(socket.gethostname())
