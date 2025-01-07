@@ -23,8 +23,8 @@ if __name__ == '__main__':
 from JupyRunner.core import schema, filesys_storage_api
 from JupyRunner.core import scriptrunner as runner
 
-from JupyRunner.core.helpers import get_utcnow, make_zulustr, parse_zulutime, log, set_loglevel, get_primary_ip
-from JupyRunner.core.helpers_mattermost import send_mattermost
+from JupyRunner.core.helpers import get_utcnow, make_zulustr, parse_zulutime, log, set_loglevel, get_primary_ip, load_config
+from JupyRunner.core.helpers_mattermost import send_mattermost, LOGGING_EMOJIES
 
 my_runner_id = os.environ.get('RUNNER_ID', None)
 
@@ -33,8 +33,7 @@ run_directly = None
 
 processes = {}
 
-with open('config.yaml', 'r') as fp:
-    config = yaml.safe_load(fp)
+config = load_config()
 
 modules = [runner, filesys_storage_api]
 for module in modules:
@@ -43,7 +42,7 @@ for module in modules:
 for module in modules:
     module.start(config)
 
-set_loglevel(config)
+
 
 
 api = runner.api
@@ -120,7 +119,7 @@ def finish(p, id):
         s += f'\nFAILED on processing for script {id}'
         s += f'\nError Message: ```{str(err)}```'
         s += f'\nSTATUS NEW: **FAILED**'
-        send_mattermost(s)
+        send_mattermost(s, emoji=LOGGING_EMOJIES.FAIL)
 
     return id
 
@@ -223,6 +222,30 @@ def tick_cancelling():
 
         log.info('DONE CHECKING with ' + str(script))
         
+def tick_housekeeping():
+    log.debug(f'tick_housekeeping...')
+    # initial checks
+    stati = [schema.STATUS.RUNNING]
+    scripts = api.qry(stati=stati)
+
+    log.debug(f'got N={len(scripts)} scripts which need attention...')
+
+    for script in scripts:
+        stat = ''
+        try:
+            if not test_is_running(script.id):
+                stat = schema.STATUS.FAULTY
+        except Exception as err:
+            script.append_error_msg(str(err))
+            log.error('ERROR: ' + str(err))
+            stat = schema.STATUS.FAULTY
+        
+        if stat:
+            log.debug('setting status... ' + stat)
+            script = set_prop_remote(script, status=stat, errors=script.errors)
+        log.info('DONE CHECKING with ' + str(script))
+            
+
 
 
 def tick_cleanup():
@@ -231,12 +254,18 @@ def tick_cleanup():
     to_remove = []
     for script_id, p in processes.items():
         try:
-            
+            log.debug(f'{script_id=}, process: {p=}')
+
             if not test_is_running(script_id):
                 log.info(f'CLEANING UP PROCESSES for script {script_id}, {p}')
                 k = finish(p, script_id)
                 to_remove.append(k)
                 log.info(f'DONE CLEANING script {script_id}, {p}')
+            else:
+                log.debug(f'... still running')
+                # p = subprocess.Popen(cmds, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                # log.debug(f'{p.stdout.readlines()=}')
+                # log.debug(f'{p.stderr.readlines()=}')
 
         except Exception as err:
             obj = get_script(script_id)
@@ -304,6 +333,7 @@ def tick():
     tick_awaiting_check()
     tick_cancelling()
     tick_cleanup()
+    tick_housekeeping()
     tick_start()
     log.debug(f'tick... DONE')
 
@@ -321,7 +351,7 @@ def startup_testrun():
     startup_script = runner.api.post({'script_in_path': new_path, 'device_id': 'dummy_device'})
     assert startup_script, 'error starting a testscript!'
 
-
+    # papermill "/home/jovyan/shared/repos/99_startup_testscript.ipynb" "/home/jovyan/work/test.ipynb" -p "path_to_libs" "/home/jovyan/shared/libs/"
 
 def startup_info():
     id = 'pc_default_startinfo' if not my_runner_id else f'pc_{my_runner_id}_startinfo'
@@ -362,9 +392,8 @@ def run():
     t_sleep = config.get('procserver', {}).get('t_interval', 60)
     
     i = 0
-    t = t_sleep/2
-    log.info(f'procserver waiting {t=} sec before starting...')
-    time.sleep(t) # to have the DB up and running
+    log.info(f'procserver waiting {t_sleep/2} sec before starting...')
+    time.sleep(t_sleep/2) # to have the DB up and running
     log.info(f'pinging server at "{api.base_url}"...')
 
     assert runner.api_interface.ping(), f'pinging {runner.api_interface.url=} failed!'
