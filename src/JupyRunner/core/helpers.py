@@ -1,6 +1,8 @@
 import re, os
 import dateutil.parser, datetime, time, logging, sys
 
+import yaml
+
 
 log_level = logging.DEBUG
 
@@ -186,6 +188,18 @@ def can_write(path):
     """
 
     return os.access(path, os.W_OK)
+
+
+def load_config(pth=None):
+    if pth is None:
+        pth = 'config.yaml'
+
+    log.info(f'Loading config from {pth=}')
+    with open(pth, 'r') as fp:
+        config = yaml.safe_load(fp)
+
+    set_loglevel(config)
+    return config
 
 
 if __name__ == '__main__':
