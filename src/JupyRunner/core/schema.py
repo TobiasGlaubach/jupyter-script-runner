@@ -223,6 +223,8 @@ class Script(SQLModel, table=True):
             self.script_version = hashlib.md5(f.read()).hexdigest() + '_' + dtlast_change
         return self.script_version
     
+    def is_failed(self):
+        return self.status in [STATUS.FAILED, STATUS.CANCELLED, STATUS.ABORTED, STATUS.FAULTY]
 
     def set_script_out_path(self, force_overwrite=False):
         # BUG: There is some form of bug here with the default script dir folder, but it seems to be working for now (somehow)!
