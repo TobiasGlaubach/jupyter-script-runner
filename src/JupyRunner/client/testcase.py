@@ -50,6 +50,28 @@ def print(*args, **kwargs):
 print.log = []
 print.do_log = False
 
+results = []
+
+
+def clear_cache(return_cache=False):
+    
+    global results
+    
+    if return_cache:
+        res = [r for r in results]
+        printlog = [l for l in print.log]
+    
+    print.log.clear()
+    results.clear()
+    print.do_log = False
+
+    if return_cache:
+        return res, printlog
+        
+def reset():
+    clear_cache()
+    
+
 def testcase(_func=None, *, test_name='', func_to_get_chan_values=None, expected_chan_values=None, n_repeat=1):
 
     def decorator_name(func):
