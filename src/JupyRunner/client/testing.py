@@ -1,6 +1,9 @@
 
 import functools
 import datetime
+import traceback
+import time
+
 
 # helper function instead of assert
 def asserte(err, to_test, message, do_print=True):
@@ -58,20 +61,18 @@ def get_default_print():
     return _print
 
 
-def clear_cache(return_cache=False):
+def clear_cache():
     
     global results
     
-    if return_cache:
-        res = [r for r in results]
-        printlog = [l for l in print.log]
-    
+    res = [r for r in results]
+    printlog = [l for l in print.log]
+
     print.log.clear()
     results.clear()
     print.do_log = False
 
-    if return_cache:
-        return res, printlog
+    return res, printlog
         
 def reset():
     clear_cache()
@@ -111,24 +112,31 @@ def get_summary(results, t_script_start, t_script_end, do_print = True):
     return lines, err_s
 
 
-def testcase(_func=None, *, test_name='', func_to_get_chan_values=None, expected_chan_values=None, n_repeat=1):
+def testcase(_func=None, *, test_name='', func_to_get_chan_values=None, expected_chan_values=None, n_repeat=1, doc=None, results_in = None):
 
     def decorator_name(func):
         @functools.wraps(func)
         def wrapper():
-            global results
+            if results_in:
+                _results = results_in
+            else:
+                global results
+                _results = results
 
             for i in range(n_repeat):
                 print.log.clear()
                 print.do_log = True
-            
-                fname = 'TESTCASE No. {: 4d} | "{}"'.format(len(results), func.__name__)
+
+                fname = 'TESTCASE No. {: 4d} | "{}"'.format(len(_results), func.__name__)
+                if n_repeat > 1:
+                    fname += f' run no. {i: 4d}'
+
                 if test_name:
                     fname += f' | "{test_name}"'
                     
                 name = func.__name__ if not test_name else test_name
 
-                print_color((('-'*20) + ' RUNNING ' + fname + '-'*20).ljust(100, '-'), 'bold')
+                print_color((('-'*20) + ' RUNNING ' + fname).ljust(100, '-'), 'bold')
                 print_color(fname + 'running...', 'blue')
 
                 t_start = datetime.datetime.utcnow()
@@ -151,7 +159,10 @@ def testcase(_func=None, *, test_name='', func_to_get_chan_values=None, expected
                     s = 'ERROR while executing:\n' + traceback.format_exc()
                     print_color(s, 'red')
                     # ADD TO RESULTS
-                    results.append((name, s))
+                    _results.append((name, s))
+                    if not doc is None:
+                        doc.add_md('#### ' + fname + '\n this is the individual test output while running the test:\n\n', chapter='Testcases')
+                        doc.add_pre(s, chapter='Testcases')
                     return 
                 
                 if err:
@@ -194,17 +205,17 @@ def testcase(_func=None, *, test_name='', func_to_get_chan_values=None, expected
                 txt = '\n'.join(print.log)
                     
                     
-                if add_test_info_to_rep:
-                    doc.add_kw('markdown', '#### ' + fname + '\n this is the individual test output while running the test:\n\n', chapter='Testcases')
+                if not doc is None:
+                    doc.add_md('#### ' + fname + '\n this is the individual test output while running the test:\n\n', chapter='Testcases')
                     
                     for c in colors_dc.values():
                         txt = txt.replace(c, '')
-                    doc.add_kw('verbatim', txt, chapter='Testcases')
+                    doc.add_pre(txt, chapter='Testcases')
                     # doc.add_kw('verbatim', '\n'.join(print_color.log), chapter='Testcases')
 
 
                 # ADD TO RESULTS
-                results.append((name, err))
+                _results.append((name, err))
                 
 
         return wrapper

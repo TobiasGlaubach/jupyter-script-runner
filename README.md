@@ -118,3 +118,9 @@ copy paste this:
     git pull && docker-compose -f docker-compose.yml build && docker-compose -f docker-compose.yml up -d
     ```
 
+or on newer systems:
+
+    ```bash
+    git pull && docker compose -f docker-compose.yml build && docker compose -f docker-compose.yml up -d
+    ```
+
