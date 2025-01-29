@@ -1,4 +1,6 @@
 
+import functools
+import datetime
 
 # helper function instead of assert
 def asserte(err, to_test, message, do_print=True):
@@ -9,7 +11,7 @@ def asserte(err, to_test, message, do_print=True):
     else:
         return err
     
-import functools
+
 
 
 class colors:
@@ -52,6 +54,9 @@ print.do_log = False
 
 results = []
 
+def get_default_print():
+    return _print
+
 
 def clear_cache(return_cache=False):
     
@@ -71,6 +76,40 @@ def clear_cache(return_cache=False):
 def reset():
     clear_cache()
     
+def get_summary(results, t_script_start, t_script_end, do_print = True):
+
+    if do_print:
+        print('=' * 100)
+        print_color(f'FINISHED!\nTESTED N={len(results)} testcases between {t_script_start}...{t_script_end}', 'bold')
+
+        print('RESULTS:')
+        print('-' * 60)
+
+    lines = []
+    has_err = False
+    err_s = ''
+    for i, (test_name, err_str) in enumerate(results):
+        if err_str:
+            has_err = True
+            c = 'red'
+            res = ' --> FAIL!'
+        else:
+            c = 'green'
+            res = ' --> PASS!'
+        
+        line = 'TESTCASE No. {: 4.0f} | {} |> {}'.format(i, test_name.ljust(35), res)
+        lines.append(line)
+        
+        if err_str:
+            err_s += line + '\n'
+
+        if do_print:
+            print_color(line, c)
+    
+    if do_print:
+        print('=' * 100)
+    return lines, err_s
+
 
 def testcase(_func=None, *, test_name='', func_to_get_chan_values=None, expected_chan_values=None, n_repeat=1):
 
