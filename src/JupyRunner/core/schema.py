@@ -10,6 +10,8 @@ from sqlmodel import Field, SQLModel, Relationship, Enum, String, Column, JSON
 from JupyRunner.core import helpers
 import JupyRunner.core.filesys_storage_api as filesys
 
+config = helpers.load_config()
+
 STATUS_DICT = {
     "INITIALIZING": 0,
     "AWAITING_CHECK": 1,
@@ -118,7 +120,14 @@ class Device(SQLModel, table=True):
     datafiles: list["Datafile"] = Relationship(back_populates="device", sa_relationship_kwargs={"lazy": "selectin"})
     def append_error_msg(self, err):
         self.errors += '\n' + str(err)
+    
+    def get_url_full(self):
+        url = config.get('globals', {}).get('dbserver_uri')
+        return f'{url}/device/{self.id}'
 
+    def get_link_md(self):
+        return f'[{self.id}]({self.get_url_full()})'
+    
 def get_default_params():
     return {'follow_up_script' : {'script_in_path': '', 'script_params_json': {}}}
 
@@ -275,7 +284,28 @@ class Script(SQLModel, table=True):
         else:
             raise Exception(f'start_condition signature did not match expected')
 
+    
+    def get_url_full(self):
+        url = config.get('globals', {}).get('dbserver_uri')
+        return f'{url}/script/{self.id}'
 
+    def get_link_md(self):
+        return f'[script_{self.id}]({self.get_url_full()})'
+    
+    def get_showpath_md(self):
+        url = config.get('globals', {}).get('dbserver_uri')
+        outp = self.script_out_path
+        if outp:
+            name = os.path.basename(outp)
+            if name.endswith('.ipynb'):
+                name = name[:-len('.ipynb')]
+            if name.endswith('.html'):
+                name = name[:-len('.html')]
+            return f'[{name}]({url}/show/{outp})'
+        else:
+            return self.script_name if self.script_name else f'script_{self.id}'
+
+    
 class Datafile(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     script_id: int = Field(nullable=False, foreign_key="script.id")
