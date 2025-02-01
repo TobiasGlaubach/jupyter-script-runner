@@ -25,20 +25,20 @@ dfi_api = None
 device_api = None
 
 def send_mattermost_failed(script:Script, err: Exception):
-    s = ''
-    s += f'\nFAILED on processing for script {script.id=} and {script.script_out_path=}'
-    s += f'\nError Message: ```{str(err)}```'
-    s += f'\nSTATUS NEW: **FAILED**'
+    s = f'{script.get_link_md()} | {script.get_showpath_md()} '
+    s += f'\nFAILED on processing:'
+    s += f'\n- Error Message: ```{str(err)}```'
+    s += f'\n- STATUS NEW: **FAILED**'
     send_mattermost(s, emoji=LOGGING_EMOJIES.FAILED)
 
-def send_mattermost_status(script:Script):
+def send_mattermost_status(script:Script, post_str=''):
     if script.is_failed():
         e = LOGGING_EMOJIES.FAIL
     elif script.status == STATUS.FINISHED:
         e = LOGGING_EMOJIES.SUCCESS
     else:
         e = LOGGING_EMOJIES.EMPTY
-    send_mattermost(f'{script.id=} {script.status=}', emoji = e)
+    send_mattermost(f'{script.get_link_md()} | {script.get_showpath_md()} | STATUS=**{script.status}** {post_str}'.strip(), emoji = e)
 
 def setup(cnfg):
     api_interface.setup(cnfg)
@@ -187,15 +187,40 @@ def run_script(script_id:int):
         script = set_prop_remote(script, status = STATUS.RUNNING, time_started = get_utcnow())
         assert script.status == STATUS.RUNNING, 'status was not set to running!'
         
-        send_mattermost(f'Script {script.id}: RUNNING with:  {script.script_in_path} (VER:{script.script_version}) -> {script.script_out_path}', emoji=LOGGING_EMOJIES.INFO)
+        send_mattermost(f'`{script.device_id}` | {script.get_link_md()} | {script.get_showpath_md()} | STATUS=**RUNNING**', emoji=LOGGING_EMOJIES.INFO)
 
         # Run the script using Papermill
-        nb = papermill.execute_notebook(
-            script.script_in_path,
-            script.script_out_path,
-            parameters=all_params,
-            kernel_name="python3"
-        )
+        # Old implementation
+        # nb = papermill.execute_notebook(
+        #     script.script_in_path,
+        #     script.script_out_path,
+        #     parameters=all_params,
+        #     kernel_name="python3"
+        # )
+
+        cwd = os.path.dirname(script.script_in_path)
+        try:
+            nb = papermill.execute_notebook(
+                script.script_in_path,
+                script.script_out_path,
+                parameters=all_params,
+                progress_bar=False,
+                cwd = cwd,
+                kernel_name="python3", 
+            )
+
+        except (papermill.exceptions.PapermillExecutionError) as err:
+            nb = {
+                    'metadata': {
+                        'papermill': {
+                            'exception': str(err),
+                        }
+                    }
+                }
+            log.error(err)
+            log.debug(traceback.format_exc())
+            err = ''.join(traceback.format_exception(err, limit=3))
+
 
         log.info(f"Script {script.id}: Finished running with Papermill")
 
@@ -205,11 +230,23 @@ def run_script(script_id:int):
 
         # Convert the output notebook to HTML
         html_exporter = nbconvert.HTMLExporter()
+
         html_data, resources = html_exporter.from_filename(script.script_out_path)
         new_out = script.script_out_path.replace(".ipynb", ".html")
         with open(new_out, "w", encoding='utf-8') as f:
             f.write(html_data)
         script.script_out_path = new_out
+
+        # convert to html without the code and add the result as a document to the script        
+        html_exporter.exclude_input = True
+        new_out = script.script_out_path.replace(".ipynb", "_clean.html")
+        html_data, resources = html_exporter.from_filename(script.script_out_path)
+        with open(new_out, "w", encoding='utf-8') as f:
+            f.write(html_data)
+            
+        url = f'/show/{new_out}'
+        script.docs_json[os.path.basename(url)] = url
+
         script.time_finished = get_utcnow()
 
         script.papermill_json = nb.get('metadata', {}).get('papermill', {})
@@ -226,9 +263,7 @@ def run_script(script_id:int):
             # Set script status to FINISHING
             script.status = STATUS.UPLOADING
             script.script_out_path = script.script_out_path.replace(".ipynb", ".html")
-            s = f"Script {script.id}: Finished successfully on {make_zulustr(script.time_finished)}"
-            log.info(s)
-            send_mattermost(s, emoji=LOGGING_EMOJIES.SUCCESS)
+            send_mattermost_status(script)
 
         script = commit(script)
 
@@ -237,14 +272,15 @@ def run_script(script_id:int):
         
         assert isinstance(res, dict) and res.get('success', False), f'trigger_upload for {script.id=} failed! {res=}'
 
-        
-        
         script = set_prop_remote(script.id, status=STATUS.FINISHED)
+        post = ':warning: :no_entry: **WITH ERRORS** :no_entry: :warning:' if script.errors else ''
+
+        send_mattermost_status(script, post_str=post)
+
         log.info(f'finished uploading {script.id=} {script.status=}')
         return script
 
     except Exception as e:
-        raise
         log.error(f"Script {script.id}: Error running script: {e}")
         script.status = STATUS.ERROR
         script.append_error_msg(traceback.format_exc())  # Store traceback info
