@@ -190,26 +190,16 @@ def run_script(script_id:int):
         send_mattermost(f'`{script.device_id}` | {script.get_link_md()} | {script.get_showpath_md()} | STATUS=**RUNNING**', emoji=LOGGING_EMOJIES.INFO)
 
         # Run the script using Papermill
-        # Old implementation
-        # nb = papermill.execute_notebook(
-        #     script.script_in_path,
-        #     script.script_out_path,
-        #     parameters=all_params,
-        #     kernel_name="python3"
-        # )
-
-        cwd = os.path.dirname(script.script_in_path)
         try:
             nb = papermill.execute_notebook(
                 script.script_in_path,
                 script.script_out_path,
                 parameters=all_params,
-                progress_bar=False,
-                cwd = cwd,
-                kernel_name="python3", 
+                kernel_name="python3"
             )
+        except (papermill.exceptions.PapermillExecutionError) as e:
+            err = ''.join(traceback.format_exception(e, limit=3))
 
-        except (papermill.exceptions.PapermillExecutionError) as err:
             nb = {
                     'metadata': {
                         'papermill': {
@@ -219,8 +209,6 @@ def run_script(script_id:int):
                 }
             log.error(err)
             log.debug(traceback.format_exc())
-            err = ''.join(traceback.format_exception(err, limit=3))
-
 
         log.info(f"Script {script.id}: Finished running with Papermill")
 
@@ -243,7 +231,7 @@ def run_script(script_id:int):
         html_data, resources = html_exporter.from_filename(script.script_out_path)
         with open(new_out, "w", encoding='utf-8') as f:
             f.write(html_data)
-            
+
         url = f'/show/{new_out}'
         script.docs_json[os.path.basename(url)] = url
 
@@ -251,7 +239,6 @@ def run_script(script_id:int):
 
         script.papermill_json = nb.get('metadata', {}).get('papermill', {})
         err = nb.get('exception', '')
-
 
         if err:
             script.status = STATUS.FAILED
@@ -282,7 +269,7 @@ def run_script(script_id:int):
 
     except Exception as e:
         log.error(f"Script {script.id}: Error running script: {e}")
-        script.status = STATUS.ERROR
+        script.status = STATUS.FAULTY
         script.append_error_msg(traceback.format_exc())  # Store traceback info
         commit(script)
         send_mattermost_failed(script, e)

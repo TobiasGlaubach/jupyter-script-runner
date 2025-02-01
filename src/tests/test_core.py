@@ -10,6 +10,7 @@ if __name__ == '__main__':
     # print(parent_dir)
     sys.path.insert(0, parent_dir)
 
+import JupyRunner.core.schema
 
 from JupyRunner.core.schema import Device, Script  # Replace with your actual models
 from JupyRunner.core.db_interface import add_to_db, setup, start, get_engine
@@ -17,16 +18,28 @@ from JupyRunner.core.helpers import get_utcnow
 from JupyRunner.core import scriptrunner
 import JupyRunner.core.filesys_storage_api as fs
 
+config = {'db': {
+    'filepath': 'test_database.db'
+    },
+    'globals': {
+        'dbserver_uri': 'http://localhost:8000',
+    },
+    'pathes': {
+        'default_dir_meas': 'tests/test_data/',
+        'default_dir_repo': 'scripts/',
+        'default_dir_docs': 'tests/temp/loose_docs/',
+        'default_dir_libs': 'tests/temp/libs/',
+    }
+
+}
+
+JupyRunner.core.schema.config.update(config)
+config = JupyRunner.core.schema.config
+
 @pytest.fixture(scope="session")
 def engine():
-    config = {'db': {
-        'filepath': 'test_database.db'
-        },
-        'pathes': {
-            'default_dir_meas': 'tests/test_data/',
-            'default_dir_repo': 'scripts/'
-        }
-    }
+
+    config = JupyRunner.core.schema.config
 
     setup(config)
     start(config)
@@ -144,7 +157,7 @@ def test_run_script(session):
     }
     script = Script(**script_data)
     add_to_db(session, script)
-    scriptrunner.run_script(session, script)
+    scriptrunner.run_script(script.id)
 
 if __name__ == '__main__':
-    pytest.main()
+    pytest.main([__file__])

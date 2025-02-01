@@ -37,7 +37,8 @@ def send_mattermost(subject, emoji = ''):
 
     try:
 
-        s = f'{emoji}```{make_zulustr(get_utcnow())} | {send_mattermost.hostname} | {send_mattermost.ip} | ```'
+        #s = f'{emoji}```{make_zulustr(get_utcnow())} | {send_mattermost.hostname} | {send_mattermost.ip} | ``` '
+        s = f'{emoji}```{make_zulustr(get_utcnow())} ``` '
         txt = s + subject
 
         if not url:
@@ -55,8 +56,8 @@ def send_mattermost(subject, emoji = ''):
         log.error(f'send_mattermost failed with exception: {err.__repr__()}')
     
     
-send_mattermost.hostname = socket.gethostname()
-send_mattermost.ip = socket.gethostbyname(socket.gethostname())
+# send_mattermost.hostname = socket.gethostname()
+# send_mattermost.ip = socket.gethostbyname(socket.gethostname())
 
 
 if __name__ == '__main__':
