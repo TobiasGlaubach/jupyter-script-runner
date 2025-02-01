@@ -729,7 +729,16 @@ async def ids_projectvariable(script_id:int, html:int = Query(default=0, descrip
         else:
             return script.docs_json
     
+@app.get("/qry/script/{script_id}/logs")
+async def ids_projectvariable(script_id:int):
+    with dbi.se() as session:
+        script = session.get(schema.Script, script_id)
+        if not script:
+            raise HTTPException(status_code=404, detail="script not found")
+        path = os.path.join(script.get_script_dir(), 'papermill_logs.txt')
+        return FileResponse(path)
     
+
 @app.get("/qry/script/{script_id}/params")
 async def ids_projectvariable(script_id:int):
     with dbi.se() as session:
@@ -1287,7 +1296,7 @@ def handle_new_doc(doc:pyd.DocBuilder, doc_name, dir_rep, page_title, force_over
     localpath = next((k for k in dc_local if k.endswith('html')), None)
     
     baseurl = config.get('globals').get('dbserver_uri')
-    local_url = f'{baseurl}/downloadq?path={urllib.parse.quote(localpath)}'
+    local_url = f'{baseurl}/show/{urllib.parse.quote(localpath)}'
 
     rmconfig = config.get('wiki_uploader', {}).get('redmine', {})
     project_id = rmconfig.get('project_id')

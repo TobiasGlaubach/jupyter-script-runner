@@ -10,7 +10,7 @@ import yaml
 
 from JupyRunner.core import schema, api_interface, filesys_storage_api
 from JupyRunner.core.schema import Script, STATUS
-from JupyRunner.core.helpers import log, get_utcnow, make_zulustr, now_iso
+from JupyRunner.core.helpers import log, get_utcnow, make_zulustr, now_iso, logging, limit_len
 from JupyRunner.core.helpers_mattermost import send_mattermost, LOGGING_EMOJIES
 from JupyRunner.core import helpers_mattermost
 
@@ -24,21 +24,38 @@ var_api = None
 dfi_api = None
 device_api = None
 
-def send_mattermost_failed(script:Script, err: Exception):
-    s = f'{script.get_link_md()} | {script.get_showpath_md()} '
-    s += f'\nFAILED on processing:'
-    s += f'\n- Error Message: ```{str(err)}```'
-    s += f'\n- STATUS NEW: **FAILED**'
-    send_mattermost(s, emoji=LOGGING_EMOJIES.FAILED)
 
-def send_mattermost_status(script:Script, post_str=''):
-    if script.is_failed():
-        e = LOGGING_EMOJIES.FAIL
+
+
+# Create a custom log handler
+class CustomHandler(logging.Handler):
+
+    def emit(self, record):
+        # Call the function with the log message
+        message = self.format(record)
+        outfile = getattr(self, 'outfile', '')
+        if outfile:
+            with open(outfile, 'a+') as fp:
+                fp.write('\n')
+                fp.write(message)
+        else:
+            print(message)
+
+
+def send_mattermost_failed(script:Script, err: Exception):
+    s = f'{script.get_device_link_md()} | {script.get_link_md()} | {script.get_showpath_md()} | STATUS=**{script.status}** => Error: ```{limit_len(err, 50)}```'
+    send_mattermost(s, emoji=LOGGING_EMOJIES.FAIL)
+
+def send_mattermost_status(script:Script, post_str='', emoji=None):
+    if emoji:
+        pass
+    elif script.is_failed():
+        emoji = LOGGING_EMOJIES.FAIL
     elif script.status == STATUS.FINISHED:
-        e = LOGGING_EMOJIES.SUCCESS
+        emoji = LOGGING_EMOJIES.SUCCESS
     else:
-        e = LOGGING_EMOJIES.EMPTY
-    send_mattermost(f'{script.get_link_md()} | {script.get_showpath_md()} | STATUS=**{script.status}** {post_str}'.strip(), emoji = e)
+        emoji = LOGGING_EMOJIES.EMPTY
+    send_mattermost(f'{script.get_device_link_md()} | {script.get_link_md()} | {script.get_showpath_md()} | STATUS=**{script.status}** {post_str}'.strip(), emoji = emoji)
 
 def setup(cnfg):
     api_interface.setup(cnfg)
@@ -188,16 +205,37 @@ def run_script(script_id:int):
         script = set_prop_remote(script, status = STATUS.RUNNING, time_started = get_utcnow())
         assert script.status == STATUS.RUNNING, 'status was not set to running!'
         
-        send_mattermost(f'`{script.device_id}` | {script.get_link_md()} | {script.get_showpath_md()} | STATUS=**RUNNING**', emoji=LOGGING_EMOJIES.INFO)
+        send_mattermost(f'{script.get_device_link_md()} | {script.get_link_md()} | {script.get_showpath_md()} | STATUS=**RUNNING**', emoji=':black_right_pointing_triangle_with_double_vertical_bar: ')
+
+        # Set up a logger
+        pm_logger = logging.getLogger('papermill')
+        pm_logger.setLevel(logging.INFO)
+
+        # Create a custom handler
+        handler = CustomHandler()
+        handler.setFormatter(logging.Formatter('[%(asctime)s] %(message)s', datefmt='%Y-%m-%d %H:%M:%S%z'))
+        
+        # time = datetime.datetime.utcnow().strftime(filesys_storage_api.timeformat_str)
+
+        handler.outfile = os.path.join(script.get_script_dir(), 'papermill_logs.txt')
+
+        # Add the handler to the logger
+        pm_logger.addHandler(handler)
+
+        if script.script_out_path.endswith('.html'):
+            log.info('renaming script_out_path to ipynb filetype!')
+            script.script_out_path = script.script_out_path[:-len('.html')] + '.ipynb'
 
         # Run the script using Papermill
         try:
+            pm_logger.info(f'SCRIPTRUNNER: starting with {script.id=} {script.status=}\n\n' + '='*200)
+
             nb = papermill.execute_notebook(
                 script.script_in_path,
                 script.script_out_path,
                 parameters=all_params,
                 progress_bar=False,
-                
+                log_output=True,
                 kernel_name="python3"
             )
         except (papermill.exceptions.PapermillExecutionError) as e:
@@ -225,7 +263,7 @@ def run_script(script_id:int):
         log.info(f"Script {script.id}: Converting to HTML...")
         out_path = script.script_out_path
         html_data, resources = html_exporter.from_filename(out_path)
-        new_out = script.script_out_path.replace(".ipynb", ".html")
+        new_out = out_path.replace(".ipynb", ".html")
         with open(new_out, "w", encoding='utf-8') as f:
             f.write(html_data)
         log.info(f"Script {script.id}: Converting to HTML...DONE")
@@ -234,7 +272,7 @@ def run_script(script_id:int):
         log.info(f"Script {script.id}: Converting to HTML (without code)...")
         # convert to html without the code and add the result as a document to the script        
         html_exporter.exclude_input = True
-        new_out = script.script_out_path.replace(".ipynb", "_clean.html")
+        new_out = out_path.replace(".ipynb", "_clean.html")
         html_data, resources = html_exporter.from_filename(out_path)
         with open(new_out, "w", encoding='utf-8') as f:
             f.write(html_data)
@@ -258,7 +296,7 @@ def run_script(script_id:int):
             # Set script status to FINISHING
             script.status = STATUS.UPLOADING
             script.script_out_path = script.script_out_path.replace(".ipynb", ".html")
-            send_mattermost_status(script)
+            send_mattermost_status(script, emoji=':arrow_up: ')
 
         script = commit(script)
 
@@ -273,6 +311,10 @@ def run_script(script_id:int):
         send_mattermost_status(script, post_str=post)
 
         log.info(f'finished uploading {script.id=} {script.status=}')
+        post = ' WITH ERRORS!!!\n' if script.errors else ''
+        post += '\n\n' + '='*200
+        pm_logger.info(f'SCRIPTRUNNER: finished with {script.id=} {script.status=}' + post)
+
         return script
 
     except Exception as e:

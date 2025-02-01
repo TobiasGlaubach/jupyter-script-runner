@@ -41,6 +41,7 @@ def get_utcnow():
 def limit_len(k, n_max =10, LR='L'):
     if k is None:
         return str(None)
+    k = str(k)
     if LR == 'L':
         return k if len(k) < n_max else k[:n_max]+'...'
     else:

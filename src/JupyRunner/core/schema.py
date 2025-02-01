@@ -292,6 +292,13 @@ class Script(SQLModel, table=True):
     def get_link_md(self):
         return f'[script_{self.id}]({self.get_url_full()})'
     
+    def get_device_link_md(self):
+        if not self.device_id:
+            return 'no_device'
+        
+        url = config.get('globals', {}).get('dbserver_uri')
+        return f'[{self.device_id}]({url}/device/{self.device_id})'
+    
     def get_showpath_md(self):
         url = config.get('globals', {}).get('dbserver_uri')
         outp = self.script_out_path

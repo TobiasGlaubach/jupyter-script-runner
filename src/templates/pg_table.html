@@ -314,7 +314,11 @@ function loadata() {
                         s = s.replace('exp', ' exp').replace('ana', ' ana').replace('script', ' script');
                         s = s.replace('.htm', ' .htm').replace('.ipy', '  .ipy');
                         s = wrap(s, 20);
-                        return gridjs.html(`<a href="/show/${cell}" title="${cell}" style="font-size: small;">${s}</a>`);
+
+                        const dirName = cell.substring(0, cell.lastIndexOf('/'));
+                        const lnk1 = `<a href="/show/${cell}" title="${cell}" style="font-size: small;">${s}</a>`;
+                        const lnk2 = `<a href="/show/${dirName}/papermill_logs.txt" title="${dirName}/papermill_logs.txt" style="font-size: small;">execution logs</a>`;
+                        return gridjs.html(`<ul><li>${lnk1}</li><li>${lnk2}</li></ul>`);
                     }
                 },
                 { 
