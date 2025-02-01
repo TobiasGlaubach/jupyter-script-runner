@@ -35,7 +35,8 @@ def run(script_id):
     api_interface.start(config)
 
     script = scriptrunner.run_script(script_id)
-    scriptrunner.init_follow_up_script(script)
+    if not script is None:
+        scriptrunner.init_follow_up_script(script)
 
 
     tend = helpers.get_utcnow()
