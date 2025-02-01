@@ -70,6 +70,7 @@ def get(script_id) -> schema.Script:
 def commit(script:schema.Script) -> schema.Script:
     return api.put(script)
 
+
 def set_prop_remote(script_id, **kwargs) -> schema.Script:
     if hasattr(script_id, 'id'):
         script_id = script_id.id
@@ -195,6 +196,8 @@ def run_script(script_id:int):
                 script.script_in_path,
                 script.script_out_path,
                 parameters=all_params,
+                progress_bar=False,
+                
                 kernel_name="python3"
             )
         except (papermill.exceptions.PapermillExecutionError) as e:
@@ -219,21 +222,26 @@ def run_script(script_id:int):
         # Convert the output notebook to HTML
         html_exporter = nbconvert.HTMLExporter()
 
-        html_data, resources = html_exporter.from_filename(script.script_out_path)
+        log.info(f"Script {script.id}: Converting to HTML...")
+        out_path = script.script_out_path
+        html_data, resources = html_exporter.from_filename(out_path)
         new_out = script.script_out_path.replace(".ipynb", ".html")
         with open(new_out, "w", encoding='utf-8') as f:
             f.write(html_data)
+        log.info(f"Script {script.id}: Converting to HTML...DONE")
         script.script_out_path = new_out
 
+        log.info(f"Script {script.id}: Converting to HTML (without code)...")
         # convert to html without the code and add the result as a document to the script        
         html_exporter.exclude_input = True
         new_out = script.script_out_path.replace(".ipynb", "_clean.html")
-        html_data, resources = html_exporter.from_filename(script.script_out_path)
+        html_data, resources = html_exporter.from_filename(out_path)
         with open(new_out, "w", encoding='utf-8') as f:
             f.write(html_data)
 
         url = f'/show/{new_out}'
         script.docs_json[os.path.basename(url)] = url
+        log.info(f"Script {script.id}: Converting to HTML (without code)... DONE")
 
         script.time_finished = get_utcnow()
 
