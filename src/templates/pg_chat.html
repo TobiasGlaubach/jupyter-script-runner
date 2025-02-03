@@ -80,7 +80,7 @@
         return true;
     }
 
-    function mkEle(to_add, putRight, clr, src){
+    function mkEle(to_add, putRight, clr, src, data_id=''){
         var msg = document.createElement('div');
         msg.classList = "alert alert-" + clr;
         if (putRight){
@@ -94,7 +94,7 @@
         
         const from = document.createElement('small');
         s = new Date().toISOString().replace('T', ' ').split('.')[0] + ' (UTC)';
-        from.innerHTML = `<small>${s} | From: "${src}"</small>`
+        from.innerHTML = `<small>${s} | From: "${src} | ID: <code>"${data_id}"</code></small>`
         element.appendChild(from);
         element.appendChild(document.createElement('br'));
         to_add.forEach(e => {
@@ -114,12 +114,17 @@
 
         
         const headerElement = document.createElement('span');
-        var a = `<b>ID</b>: <code>"${data.id}"</code>`;
-        a += ` <b>Request-Type:</b>: <code>"${data.request_type}"</code>`;
-
-        if (data.script_id) {
-            a += `<b>Script ID:</b>: <code>"${data.script_id}"</code>`;
+        var a = `<b>Request-Type:</b>: <code>"${data.request_type}"</code>`;
+        if (data.device_id) {
+            a += ` <b>Device:</b>: <code>"${data.device_id}"</code>`;
         }
+        if (data.script_id) {
+            a += ` <b>Script ID:</b>: <code>"${data.script_id}"</code>`;
+        }
+        if (data.script_name) {
+            a += ` <b>Script Name:</b>: <code>"${data.script_name}"</code>`;
+        }
+
         headerElement.innerHTML = `<small>${a}</small>`;
 
         const messageElement = document.createElement('p');
@@ -132,7 +137,7 @@
             messageElement,
         ];
 
-        return mkEle(parts, false, 'primary', 'Server');
+        return mkEle(parts, false, 'primary', 'Server', data.id);
     }
 
     function userFeedbackToElement(message, success, N) {
@@ -201,10 +206,24 @@
         }
 
         for (const key in data) {
+            const headerElement = document.createElement('span');
+            var a = `<b>Request-Type:</b>: <code>"${data[key].request_type}"</code>`;
+            if (data[key].device_id) {
+                a += ` <b>Device:</b>: <code>"${data[key].device_id}"</code>`;
+            }
+            if (data[key].script_id) {
+                a += ` <b>Script ID:</b>: <code>"${data[key].script_id}"</code>`;
+            }
+            if (data[key].script_name) {
+                a += ` <b>Script Name:</b>: <code>"${data[key].script_name}"</code>`;
+            }
+            if (data[key].id) {
+                a += ` <b>ID:</b>: <code>"${data[key].id}"</code>`;
+            }
+            headerElement.innerHTML = a;
+            
             var el = document.createElement('li');
-            var el2 = document.createElement('code');
-            el2.innerText = key;
-            el.appendChild(el2)
+            el.appendChild(headerElement)
             request_list.appendChild(el);
         }
         
