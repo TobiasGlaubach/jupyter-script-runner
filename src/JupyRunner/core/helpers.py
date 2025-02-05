@@ -1,3 +1,5 @@
+import hashlib
+import random
 import re, os
 import dateutil.parser, datetime, time, logging, sys
 
@@ -7,9 +9,10 @@ import yaml
 log_level = logging.DEBUG
 
 
-log = logging.getLogger()
+log = logging.getLogger('jpy')
 
 logging.getLogger('sqlalchemy.engine').setLevel(logging.WARNING)
+logging.getLogger('sqlalchemy.orm').setLevel(logging.WARNING)
 
 formatter = logging.Formatter("[ %(levelname)s - %(asctime)s - %(name)s - %(filename)s:%(lineno)s] %(message)s", datefmt='%Y-%m-%d %H:%M:%S%z')
 log.setLevel(log_level)
@@ -17,6 +20,9 @@ streamHandler = logging.StreamHandler(sys.stdout)
 streamHandler.setLevel(log_level)  # Set the stream handler level to DEBUG
 streamHandler.setFormatter(formatter)
 log.addHandler(streamHandler)
+
+logging.getLogger('sqlalchemy.engine').setLevel(logging.WARNING)
+logging.getLogger('sqlalchemy.orm').setLevel(logging.WARNING)
 
 def get_loglevel(config):
     return config.get('globals', {}).get('loglevel', os.environ.get('loglevel', log_level))
@@ -110,14 +116,18 @@ def split_flat_dict_into_nested(flat_dict):
   return nested_dict
 
 
-def get_primary_ip():
-    import socket
+def get_primary_ip(use_cache=True):
+    if not get_primary_ip.cache or not use_cache:
+        import socket
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))  # Connect to a public DNS server
+        ip = s.getsockname()[0]
+        s.close()
+        get_primary_ip.cache = f'{ip}'
 
-    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    s.connect(("8.8.8.8", 80))  # Connect to a public DNS server
-    ip = s.getsockname()[0]
-    s.close()
-    return f'{ip}'
+    return get_primary_ip.cache
+
+get_primary_ip.cache = ''
 
 def get_sys_id():
     import platform
@@ -128,7 +138,17 @@ def get_sys_id():
     # Build the system information string
     return f'{uname.node}.{uname.system}.{username}'
     
-
+def get_uid(obj=None, myid=None):
+    hex_check = hashlib.sha256(os.urandom(16)).hexdigest()[-6:]
+    oid = id(obj) if not obj is None else random.randint(0, 2**16)
+    iid = myid if myid else oid
+    return f'{iso_now()}_{hex_check}_{iid}'
+    
+def parse_number(s, tp:type):
+    try:
+        return tp(s)
+    except ValueError:
+        return None
 
 def get_sys_info():
     """
@@ -193,7 +213,7 @@ def can_write(path):
 
 def load_config(pth=None):
     if pth is None:
-        pth = 'config.yaml'
+        pth = 'config_private.yaml'
 
     log.info(f'Loading config from {pth=}')
     with open(pth, 'r') as fp:
