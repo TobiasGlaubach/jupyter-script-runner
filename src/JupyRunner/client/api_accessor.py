@@ -4,6 +4,7 @@ import io
 import mimetypes
 import time
 import requests, datetime, enum, re, dateutil, sys
+import os
 
 from typing import Any, Dict, List, Union
 
@@ -148,7 +149,7 @@ class ServerApi(object):
             self.script_uid = get_uid(self, self.script_id)
         else:
             self.script_uid = None
-            
+
 
     def set_script_uid_from_outfile(self, script_out_path):
         self.script_uid = os.path.splitext(os.path.basename(script_out_path))[0]
