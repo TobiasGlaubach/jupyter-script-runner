@@ -1,0 +1,472 @@
+
+
+{% extends "base.html" %}
+
+{% block metatags %}
+<title>JupyRunner WebUI - User Feedback</title>
+<meta name="DESCRIPTION" content="JupyRunner webui user feedback">
+
+
+{% endblock %}
+
+
+{% block content %}
+
+
+
+<div style="margin-left: 10px; margin-right: 10px;">
+
+        <h3>User Live Feedback:</h3>
+        <small>(for currently active user feedback) | <a href="?dummy=1">Click here to show some dummy requests</a> | <span id="last_tick"></span> <span id="last_tick_ago"></span></small>
+        <small>
+            <div class="form-check">
+            <input type="checkbox" class="form-check-input" id="autoRefresh" checked>
+            <label class="form-check-label" for="autoRefresh">Auto refresh</label>
+          </div>
+          <div class="form-check">
+            <input type="checkbox" class="form-check-input" id="showRunningScripts">
+            <label class="form-check-label" for="showRunningScripts">Show only running scripts</label>
+          </div>
+        </small>
+          
+        <div id="errorMessage"></div>
+
+        <div class="accordion" id="request_list">
+
+        </div>
+
+        <div id="feedback">
+        </div>
+</div>
+    
+<script>
+    var request_id = null;
+    var request_ids_handled = Array();
+
+    const queryParams = new URLSearchParams(window.location.search);
+    const dummyParam = queryParams.get('dummy');
+    const replyUrl = '/user_feedback/replyform'
+    const qryUrl = '/scriptlogs_qry'
+
+    function formatTimeDiff(timeDiff) {
+        const seconds = Math.floor(Math.abs(timeDiff) / 1000);
+        const minutes = Math.floor(seconds / 60);
+        const hours = Math.floor(minutes / 60);
+        const days = Math.floor(hours / 24);
+
+        if (days > 0) {
+            return `${days} day${days > 1 ? 's' : ''} ${timeDiff > 0 ? 'from now' : 'ago'}`;
+        } else if (hours > 0) {
+            return `${hours} hour${hours > 1 ? 's' : ''} ${timeDiff > 0 ? 'from now' : 'ago'}`;
+        } else if (minutes > 0) {
+            return `${minutes} minute${minutes > 1 ? 's' : ''} ${timeDiff > 0 ? 'from now' : 'ago'}`;
+        } else {
+            return `${seconds} second${seconds > 1 ? 's' : ''} ${timeDiff > 0 ? 'from now' : 'ago'}`;
+        }
+    }
+
+    function isEmpty(obj) {
+        for (const prop in obj) {
+            if (Object.hasOwn(obj, prop)) {
+            return false;
+            }
+        }
+        return true;
+    }
+
+    function handleFeedback(resp) {
+        
+        const frame = document.getElementById(`${resp.id}_frame`);
+        color = resp.success ? 'success':'warning'
+        frame.className = "alert alert-" + color;
+        
+        const container = document.getElementById(`${resp.id}_container`);
+        const r = resp.success ? 'Handled':'Cancelled';
+        const dt = new Date().toISOString().replace('T', ' ').split('.')[0] + ' (UTC)';
+
+
+        container.innerHTML = `<p>
+            <strong>Request ${r} by ${resp.client} @${dt}
+        </p><p>Feedback from Server:</strong> <span>${resp.feedback}</span></p>`;
+        container.style.marginBottom = "2px";
+        container.style.marginTop = "22px";
+    }
+
+  
+
+    function mkAlert(req, content, color='secondary', other){
+        var msg = document.createElement('div');
+        msg.classList = "alert alert-" + color;
+        msg.id = req.id + '_frame'
+        msg.style.paddingTop = '1px';
+        msg.style.paddingBottom = '0px';
+        msg.style.margin = '3px';
+        
+        s = new Date(req.timestamp*1000).toISOString().replace('T', ' ').split('.')[0] + ' (UTC)';
+
+        const element = document.createElement('div');       
+        element.style.position = "relative" ;
+        element.innerHTML = `<small style="position: absolute; top: 1px; right: 1px;"><b>ID:</b> ${req.id} <b>Time:</b> ${s}</small>`;
+
+        msg.appendChild(element);
+        if (typeof(content) === 'string') {
+            let e = document.createElement('div'); 
+            e.innerHTML = content;
+            msg.appendChild(e);   
+        } else {
+            msg.appendChild(content);   
+        }
+
+        if (other) {
+            msg.appendChild(other);   
+        }
+             
+        return msg;
+    }
+
+
+
+    function makeScriptCard(scriptInfo) {
+        
+        var request_list = document.getElementById('request_list');
+        
+        if(!scriptInfo || scriptInfo.length < 1 || isEmpty(scriptInfo)){
+            return;
+        }
+        const doShow = request_list.childElementCount < 1;
+        const cardUId = scriptInfo.script_name ? scriptInfo.script_name : 'loose_request_' + scriptInfo.id;
+
+        var content = '';
+        if (scriptInfo.device_id) {
+            content += ` <b>Device:</b>: <code>"${scriptInfo.device_id}"</code>`;
+        }
+        if (scriptInfo.script_id) {
+            content += ` <b>Script ID:</b>: <code>"${scriptInfo.script_id}"</code>`;
+        }
+        if (scriptInfo.script_name && scriptInfo.script_name != scriptInfo.id) {
+            content += ` <b>Script Name:</b>: <code>"${scriptInfo.script_name}"</code>`;
+        }
+
+
+        // <iframe src="/scriptlogs?id="${scriptLogId}" title="Logs for ${scriptLogId}" frameborder="0" scrolling="auto" style="width: 100%; height: 200px; overflow-y: auto;">
+        // </iframe>
+        content += `
+
+<div><b>Logs: </b></div>
+<div id="${cardUId}_logs" scrolling="auto" style="width: 100%; max-height: 800px; margin-top:5px; overflow-y: auto;border: 1px solid gray; border-radius: 10px;">
+</div>`
+
+        const tp = scriptInfo.script_name ? 'Name' : 'ID';
+        const card = document.createElement('div');
+        card.className = "card";
+        const s = doShow ? " show" : "";
+        
+        card.innerHTML = `<div class="card-header" id="${cardUId}_heading">
+      <h2 class="mb-0">
+        <button class="btn btn-link btn-block text-left collapsed" type="button" data-toggle="collapse" data-target="#${cardUId}_content_div" aria-expanded="true" aria-controls="collapseOne">
+            <span><b>Script with ${tp}:</b>: ${cardUId}${status}<strong> status=</strong><strong id="${cardUId}_status">"${scriptInfo.script_status}"</strong></span>
+        </button>
+      </h2>
+    </div>
+
+    <div id="${cardUId}_content_div" class="collapse${s}" aria-labelledby="${cardUId}_heading" data-parent="#request_list">
+      <div class="card-body">
+        <div id="container">
+            ${content}
+        </div>
+        <button onclick="clearScript('${cardUId}', this)" class="btn btn-warning">Clear script</button>
+      </div>
+      
+    </div>`;
+        
+
+        request_list.appendChild(card);
+        return cardUId;
+    }
+    
+    function handleServerInput(data) {
+        
+        const script_uid = data.script_name ? data.script_name : data.id;
+        const el = document.getElementById(`${script_uid}_logs`);
+        console.log(data, el);
+        if (!el) {
+
+            makeScriptCard(data);
+        }   
+        
+        const statusEl = document.getElementById(`${script_uid}_status`);
+        if (data.hasOwnProperty("script_status") && data.script_status) {
+            
+            statusEl.innerText = data.script_status;
+            if ("FAILED CANCELLED STATUS.ABORTED FAULTY".split(' ').includes(data.script_status)) {
+                statusEl.style.color = 'red';
+            } else if (data.script_status == "FINISHED") {
+                statusEl.style.color = 'green';
+            } else {
+                statusEl.style.color = 'blue';
+            }
+        } else {
+            statusEl.innerText = '<unknown>';
+            statusEl.style.color = 'gray';
+        }
+        
+
+        const logs = document.getElementById(`${script_uid}_logs`);
+        if (data.request_type === 'info' || data.handled === 1) {
+            logs.appendChild(createInfoLog(data));
+            logs.scrollTop = logs.scrollHeight;
+        } else {
+            logs.appendChild(createForm(data));
+            logs.scrollTop = logs.scrollHeight;
+        }
+    }
+
+
+    function createInfoLog(req) {
+        const div = document.createElement('div');
+        const p = document.createElement('div');
+        p.style.fontFamily = 'monospace';
+        var color = 'blue';
+
+        if (req.hasOwnProperty('kwargs') && req.kwargs && req.kwargs.hasOwnProperty('color')) {
+            color = req.kwargs.hasOwnProperty('color')
+        } else {            
+            if (["error", "fail", "invalid"].some(s => req.message.toLowerCase().includes(s))) {
+                color = "red";
+            } else if (["pass", "ok", "success"].some(s => req.message.toLowerCase().includes(s))) {
+                color = "green";
+            }
+        }
+
+        p.style.color = color;
+        s = new Date(req.timestamp*1000).toISOString().replace('T', ' ').split('.')[0] + ' (UTC)';
+
+        p.innerText = `[${req.request_type.toUpperCase()} - ${s}] ${req.message}`;
+        div.appendChild(p);
+        if (req.hasOwnProperty('kwargs') && req.kwargs && req.kwargs.hasOwnProperty('html')) {
+            const sub = document.createElement('div');
+            sub.innerHTML = req.kwargs.html;
+            div.appendChild(sub);
+        }
+
+        return div;
+    }
+
+    function createForm(req) {
+
+        let form = document.createElement('form');
+        form.id = req.id + '_form';
+        form.className = "form-group";
+        form.style.marginBottom = "5px";
+
+        var inputTemplate = '';
+        var fileTemplate = '';
+
+        if (req.request_type === 'text') {
+            inputTemplate = '<input type="text" name="reply" class="form-control" required>';
+            fileTemplate = '';
+        } else if (req.request_type === 'confirm') {
+            inputTemplate = '<input type="text" name="reply" class="form-control" disabled>';
+            fileTemplate = '';
+        } else if (req.request_type === 'float') {
+            inputTemplate = '<input type="number" name="reply" class="form-control" step="any" required>';
+            fileTemplate = '';
+        } else if (req.request_type === 'int') {
+            inputTemplate = '<input type="number" name="reply" class="form-control" step=1 required>';
+            fileTemplate = '';
+        } else if (req.request_type === 'file') {
+            inputTemplate = '';
+            fileTemplate = '<input type="file" name="fls" class="form-control">';
+        } else if (req.request_type === 'files') {
+            inputTemplate = '';
+            fileTemplate = '<input type="file" name="fls" class="form-control" multiple>';
+        } else if (req.request_type === 'pictures') {
+            inputTemplate = '';
+            fileTemplate = '<input type="file" name="fls" class="form-control" accept="image/*" multiple>';
+        } else if (req.request_type === 'picture') {
+            inputTemplate = '';
+            fileTemplate = '<input type="file" name="fls" class="form-control" accept="image/*">';
+        } else {
+            throw new Error(`Unknown request_type! "${req.request_type}" allowed are confirm file files picture pictures text int float`);
+        }
+
+        form.innerHTML = `
+            <b margin-top: 2px; margin-bottom:2px;>Prompt: </b>
+            <label style="margin-top: 2px; margin-bottom:2px;"><span>${req.message}</span></label>
+            <div class="input-group input-group-sm" style="margin-bottom: 1px;">    
+                <div class="input-group-prepend">
+                    <span class="input-group-text" style="min-width: 150px"><b>"${req.request_type}" Request:</b></span>
+                </div>
+
+                ${inputTemplate}
+                ${fileTemplate}
+                <div class="input-group-append">
+                    <button type="submit" class="btn btn-primary" value="ok">OK</button>
+                    <button type="submit" class="btn btn-secondary" value="cancel">Cancel</button>
+                </div>
+            </div>
+    `;
+
+        form.addEventListener('submit', function(event) {
+            event.preventDefault();
+            
+            let input = this.querySelector('input[name="reply"]');
+            
+            let files = this.querySelector('input[name="fls"]');
+            
+            const success = event.submitter.value === 'ok' ? "1" : "";
+            let data = new FormData();
+            var message = 'empty';
+            if (success && inputTemplate) {
+                message = input.value ;
+            } else if (success) {
+                message = 'ok';
+            } else {
+                message = 'Cancelled by user';
+            }
+
+            if (fileTemplate && success && isEmpty(files)) {
+                alert('Need to select some files to upload!');
+                return;
+            }
+
+            console.log(request_id, success, message);
+
+            data.append('success', success);
+            data.append('message', message);
+            data.append('id', req.id);
+            data.append('response_type', req.request_type);
+            if (!isEmpty(files)) {
+                for (let i = 0; i < files.length; i++) {
+                    data.append('files', files[i]);
+                }
+            }
+            console.log(data);
+            fetch(replyUrl, {
+                method: 'POST',
+                body: data
+            })
+            .then(response => {
+            if (!response.ok) {
+                throw new Error('Network response was not ok');
+            }
+            return response.json();
+            })
+            .then(resp => {
+                console.log(resp);
+                handleFeedback(resp);
+            })
+            .catch(error => {
+                console.error(error)
+                document.getElementById('errorMessage').appendChild(mkAlert(req, 'There was an error uploading the data: ' + error.message, color='danger'));
+            });
+        });
+        div = document.createElement('div');
+        div.id = req.id + '_container';
+        div.appendChild(form);
+        
+        var sub = null;
+        if (req.hasOwnProperty('kwargs') && req.kwargs && req.kwargs.hasOwnProperty('html')) {
+            sub = document.createElement('div');
+            sub.innerHTML = req.kwargs.html;
+        }
+
+        return mkAlert(req, div, color='primary', other=sub);
+    }
+
+
+
+    async function clearScript(scriptUid, button) {
+        const confirmClear = confirm(`Are you sure you want to clear the script with UID: ${scriptUid}?`);
+        if (!confirmClear) {
+            return;
+        }
+
+        const url = new URL('/user_feedback/remove_script', window.location.origin);
+        url.searchParams.append('script_uid', scriptUid);
+
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+            'Content-Type': 'application/json'
+            }
+        });
+
+        if (!response.ok) {
+            let errorMessage = 'An error occurred while clearing the script.';
+            if (response.status === 404) {
+            errorMessage = `The script with UID: ${scriptUid} was not found.`;
+            } else if (response.status === 403) {
+            errorMessage = 'You do not have permission to clear this script.';
+            } else if (response.status === 500) {
+            const error = await response.json();
+            errorMessage = `An internal server error occurred: ${error.message}`;
+            }
+            alert(errorMessage);
+            return;
+        }
+
+        const feedback = await response.json();
+        const feedbackElement = document.getElementById(`${scriptUid}_logs`);
+        div = document.createElement('div');
+        div.innerHTML = `<p>Script ${scriptUid} Successfully Cleared: N=${feedback.reqs} requests removed and N=${feedback.replied} answers removed on the server. Reload page if you want to remove this script from view...</p>`;
+        feedbackElement.appendChild(div);
+
+        button.disabled = true;
+    }
+
+
+    let since = null;
+    let lastTick = new Date();
+
+    function fetchScriptLogs() {
+        if (document.getElementById('autoRefresh').checked) {
+            const url = new URL(qryUrl, window.location.origin);
+            if (since !== null) {
+                url.searchParams.append('since', since);            
+            }
+            if (dummyParam) {
+                url.searchParams.append('dummy', 1);
+            }
+            if (document.getElementById('showRunningScripts').checked) {
+                url.searchParams.append('only_running', 1);
+            }            
+
+            fetch(url)
+                .then(response => response.json())
+                .then(data => {
+                    console.log(data);
+                    var t = -1.0;
+                    for (let i = 0; i < data.length; i++) {
+                        handleServerInput(data[i]);
+                        t = (data[i].timestamp && data[i].timestamp > t) ? data[i].timestamp : t;
+                    }               
+                    if (t > 0 ) { since = t; }
+                })
+                .catch(error => console.error(error));
+
+                lastTick = new Date();
+                
+        }
+        
+        s = lastTick.toISOString().replace('T', ' ').split('.')[0] + ' (UTC)';
+        document.getElementById('last_tick').innerText = `Last Tick: ${s}`;
+        document.getElementById('last_tick_ago').innerText = formatTimeDiff(new Date() - lastTick);
+
+        if (document.getElementById('request_list').childElementCount === 0) {
+            document.getElementById('feedback').innerHTML = '<hr><strong>-- Nothing to Show--</strong>';
+        } else {
+            document.getElementById('feedback').innerHTML = '';
+        }
+    }
+
+    fetchScriptLogs();
+    setInterval(fetchScriptLogs, 2000);
+
+    //fetchRequest();
+
+</script>
+
+
+
+{% endblock %}

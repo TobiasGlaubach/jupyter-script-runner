@@ -1,21 +1,24 @@
 
+import base64
 from contextlib import asynccontextmanager
 import datetime
+import hashlib
 import json
 import os
+from typing import Generator
 
 import subprocess
 import time
 import traceback
-from typing import Annotated, Any, Callable, Dict, List
+from typing import Annotated, Any, Callable, Dict, List, Optional
 import zipfile
 import nbconvert
 import pydocmaker as pyd
 import urllib.parse
 import asyncio
 
-from fastapi import FastAPI, Form, HTTPException, Path, Query, Request, Response, UploadFile, File
-from fastapi.responses import HTMLResponse
+from fastapi import FastAPI, Form, HTTPException, Path, Query, Request, Response, UploadFile, File, Response, Depends
+from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.responses import FileResponse
@@ -25,6 +28,8 @@ from jinja2 import Environment, FileSystemLoader
 
 
 from JupyRunner.core import db_interface as dbi
+from JupyRunner.core import helpers_userfeedback as usr
+
 from JupyRunner.core import schema, helpers, filesys_storage_api, helpers_mattermost, helpers_papermill, scriptrunner
 from JupyRunner.io import nextcloud_api, redmine_api, local_filesys_api
 import JupyRunner
@@ -1390,29 +1395,124 @@ async def upload_doc_for_script(script_id: int, r: UploadDocSchema) -> Dict[str,
         raise
 
 
-class UserFeedbackRequest(BaseModel):
-    message: str
-    request_type: str
-    id: str
-    script_id: int|None = None
+"""
 
-class UserFeedbackReply(BaseModel):
-    id: str
-    message: str
-    response_type: str
-    files: dict[str, str]|None = None
+██    ██ ███████ ███████ ██████      ███████ ███████ ███████ ██████  ██████  
+██    ██ ██      ██      ██   ██     ██      ██      ██      ██   ██ ██   ██ 
+██    ██ ███████ █████   ██████      █████   █████   █████   ██   ██ ██████  
+██    ██      ██ ██      ██   ██     ██      ██      ██      ██   ██ ██   ██ 
+ ██████  ███████ ███████ ██   ██     ██      ███████ ███████ ██████  ██████  
+                                                                                                     
+"""
+
+
+def limit_number_of_open_feedbacks(n_max = None):
+    if n_max is None:
+        n_max = config.get('globals', {}).get('n_feedbacks_max', 200)
+
+    global feedback_requests, feedback_answers
+
+    if len(feedback_requests) > n_max:
+        sorted_feedback_requests = dict(sorted(feedback_requests.items(), key=lambda item: item[1].timestamp))
+        ikeys = iter(sorted_feedback_requests)
+        while len(feedback_requests) > n_max:
+            oldest_key = next(ikeys)
+            feedback_requests.pop(oldest_key, None)
+
+    if len(feedback_answers) > n_max: 
+        sorted_feedback_answers = dict(sorted(feedback_answers.items(), key=lambda item: item[1].timestamp))
+        ikeys = iter(sorted_feedback_answers)
+        while len(feedback_answers) > n_max:
+            oldest_key = next(ikeys)
+            feedback_answers.pop(oldest_key, None)
+
+
+def _user_feedback_reply(reply:usr.UserFeedbackReply):
+
+    global feedback_answers, feedback_requests
+
+    s = ''
+    req = feedback_requests.get(reply.id, None)
+    if req is None:
+        res = False
+        s += f'--> RESULT: ERROR The request with ID={reply.id} does not exist or nobody is waiting for it any more!'
+    elif reply.id in feedback_answers or req.handled:
+        res = False
+        s += f'--> RESULT: ERROR The request with ID={reply.id} is already marked as finished!'
+    elif req.request_type == 'info':
+        res = False
+        s += f'--> RESULT: ERROR The request with ID={reply.id} is only an info type and can not be marked as completed!'
+    else:
+        res = True
+        c = 'finished' if reply.success else 'cancelled'
+        s += f'--> RESULT: marked request with ID={reply.id} as {c}'
+
+    input_data = reply.to_dict(multiline=False)
+    input_data['feedback_info'] += s
+
+    if res:
+        feedback_answers[reply.id] = input_data
+
+    return res, reply, input_data, req
+
+
+
+@app.post("/user_feedback/clear_all")
+async def user_feedback_clear_all()-> Dict[str, Any]:
+
+    global feedback_requests, feedback_answers
+    feedback_answers.clear()
+    feedback_requests.clear()
+
+@app.post("/user_feedback/remove_script")
+async def user_feedback_remove_script(script_uid: str):
+    global feedback_requests, feedback_answers
+    feedback_answers.clear()
+    feedback_requests.clear()
+    to_rem = []
+
+    for req in feedback_requests:
+        if req.get_script_uid() == script_uid:
+            to_rem.append(req.id)
+    removed = {
+        'input': script_uid,
+        'reqs': [],
+        'replies': []
+    }
+
+    for r in to_rem:
+        removed['reqs'].append(feedback_requests.pop(r, None))
+        removed['replies'].append(feedback_answers.pop(r, None))
+
+    removed['reqs'] = len(removed['reqs'])
+    removed['replies'] = len(removed['replies'])
+
+    return removed
+
+async def user_feedback_clear_script()-> Dict[str, Any]:
+
+    global feedback_requests, feedback_answers
+    feedback_answers.clear()
+    feedback_requests.clear()
+
 
 
 @app.post("/user_feedback/create")
-async def user_feedback_create(req: UserFeedbackRequest)-> Dict[str, Any]:
+async def user_feedback_create(req: usr.UserFeedbackRequest)-> Dict[str, Any]:
 
-    id = req.id
+    id_ = req.id
     global feedback_requests, feedback_answers
-    if id in feedback_requests:
-        raise HTTPException(400 , f'request with {id=} already exists!')
+    if id_ in feedback_requests:
+        raise HTTPException(400 , f'request with {id_=} already exists!')
+    try:
+        req.populate_empty_fields()
+    except Exception as err:
+        pass
     
-    feedback_requests[id] = req        
-    return {'success': True, 'id': req.id, 'request': feedback_requests.get(id, None)}
+    limit_number_of_open_feedbacks()
+    feedback_requests[id_] = req        
+    return {'success': True, 'id': req.id, 'request': feedback_requests.get(id_, None)}
+
 
 @app.get("/user_feedback/get")
 async def user_feedback_get(id = Query(description='The id of the request to wait for', default=None))-> Dict[str, Any]:
@@ -1421,10 +1521,6 @@ async def user_feedback_get(id = Query(description='The id of the request to wai
 
     if id is None:
         r = {id:feedback_requests.get(id, None) for id in feedback_requests}
-        # if not r:
-        #     id_ = 'dummy_request'
-        #     return {id_: UserFeedbackRequest(id=id_, message='There is currently no request on the server to handle... please check again later', request_type='')}
-        
         return r
 
     if not id in feedback_requests:
@@ -1433,89 +1529,179 @@ async def user_feedback_get(id = Query(description='The id of the request to wai
     return {'request': feedback_requests.get(id, None), 'answer': feedback_answers.get(id, None)}
 
 
-@app.get("/user_feedback/wait_completed")
-async def user_feedback_wait_completed(id = Query(description='The id of the request to wait for'))-> Dict[str, Any]:
-    raise NotADirectoryError('blocking until ready is currently buggy. Please use a polling mechanism with "/user_feedback/check?id=..." instead')
-    if not id in feedback_requests:
-        raise HTTPException(404 , f'request with {id=} was not found!')
-    
-    while not feedback_answers.get(id, None):
-        time.sleep(1)
-
-    return {'request': feedback_requests.pop(id), 'answer': feedback_answers.pop(id)}
-
-
-
 @app.get("/user_feedback/check")
-async def user_feedback_wait_completed(id = Query(description='The id of the request to wait for'))-> Dict[str, Any]:
+async def user_feedback_check(id = Query(description='The id of the request to wait for'))-> Dict[str, Any]:
     if not id in feedback_requests:
         raise HTTPException(404 , f'request with {id=} was not found!')
     if not id in feedback_answers:
         return {}
     else:
-        return {'request': feedback_requests.pop(id), 'answer': feedback_answers.pop(id)}
+        # keep reuqest for logging it as it is marked as done and will be removed later
+        return {'request': feedback_requests.get(id), 'answer': feedback_answers.pop(id)}
+    
 
-
-@app.post("/user_feedback/create_and_wait")
-async def user_feedback_create_and_wait(req: UserFeedbackRequest, request: Request)-> Dict[str, Any]:
-    raise NotADirectoryError('blocking until ready is currently buggy. Please use a polling mechanism with "/user_feedback/check?id=..." instead')
-    log.info(f'{request.client} requested {req=} and will wait for it')
-
-    id = req.id
+@app.get("/scriptlogs_qry")
+async def get_script_logs_qry(since: Optional[float|int] = None, only_running: Optional[int|None] = None, dummy: Optional[int] = None) -> list[usr.UserFeedbackRequest]:
+    
+    # Generate some dummy data
     global feedback_requests, feedback_answers
-    if id in feedback_requests:
-        raise HTTPException(400 , f'request with {id=} already exists!')
-    feedback_requests[id] = req 
+    log.debug(f'scriptlogs_qry?{since=}&{dummy=}')
 
-    while not feedback_answers.get(id, None):
-        await asyncio.sleep(1)
+    if dummy:
+        t = 1738700000
+        script = dbi.get(schema.Script, 1)
+        if not script is None:
+            script_name = os.path.basename(script.script_out_path)
+            script_id = 1
+            device_id = script.device_id
+        else:
+            script_name = ''
+            script_id = 0
+            device_id = 'no_device'
 
-    return {'request': feedback_requests.pop(id), 'answer': feedback_answers.pop(id)}
+        dummy = lambda x: usr.UserFeedbackRequest(message=f'Dummy Request for {x}  '*10, request_type=x, id=helpers.get_uid(), script_id=script_id, script_name=script_name, device_id=device_id, timestamp=t)
+        allowed = 'confirm file files picture pictures text int float info info info'.split()
+        current_requests = [dummy(x) for x in allowed]
+    
+    else:            
+        current_requests = list(feedback_requests.values())
+        if only_running or only_running is None and len(current_requests) > 100:
+            stati = [s for s in schema.STATUS if not s in [schema.STATUS.FAILED, schema.STATUS.CANCELLED, schema.STATUS.ABORTED, schema.STATUS.FAULTY, schema.STATUS.FINISHED]]
+            res = dbi.qry_scripts(stati=stati)
+            current_requests = [r for r in current_requests if any((r.match_script(s) for s in res))]
+            
+
+    if since:
+        if not isinstance(since, (int, float)) or since <= 0:
+            return JSONResponse(status_code=406, content={"error": f'argument "since" must be either float or int but was {type(since)=} with {since=}'})
+        current_requests = [r for r in current_requests if not r.timestamp or r.timestamp > since]
+
+    current_requests = [r.update_state() for r in current_requests]
+
+    return current_requests
+        
 
 
-@app.post("/user_feedback/reply")
-async def user_feedback_reply(request: Request):#, files: list[UploadFile] = File(...)):
+@app.post("/user_feedback/replyform")
+async def user_feedback_reply(request: Request, files: List[UploadFile] = File(None)):
     
     global feedback_requests, feedback_answers
 
-    res = False
     form = await request.form()
-    message = form.get("message")
-    success = form.get("success")
+    message = form.get("message", "")
+    success = True if form.get("success") else False
     id_ = form.get("id")
-
+    response_type = form.get("response_type")
+    error = ''
     client = f'{request.client.host}:{request.client.port}'
+    files_dc = {}
 
-    files = []
-    file_names = [file.filename for file in files]
-    s = '"confirmation"' if success else '"cancle"'
-    response_text = f"Received {s} reply.\n\n{message}\n\n"
-    if file_names:
-        response_text += f" and files: {file_names}\n\n"
-    response_text += f' from {client=}'
+    if files:
+        for file in files:
+            contents = await file.read()
+            b64_string = base64.b64encode(contents).decode("utf-8")
+            files_dc[file.filename] = b64_string
 
-    input_data = {
-        'message': message,
-        'id': id_, 
-        'success': success, 
-        'files': file_names, 
-        'sender': client,
-        'time': helpers.iso_now(),
-    }
+    
+    reply = usr.UserFeedbackReply(id=id_, message=message, response_type=response_type, files=files_dc, client=client, success=success)
+    could_parse, errors = reply.parse()
 
-    if id_ in feedback_requests and feedback_answers:
-        response_text += f'\n\nRESULT: The request with ID={id_} is already marked as finished!'
-    elif id_ in feedback_requests:
-        res = True
-        response_text += f'\n\nRESULT: marked request with ID={id_} as finished'
-        feedback_answers[id_] = input_data
+    if could_parse and not errors:
+        handled, reply, input_data, req = _user_feedback_reply(reply)
+        feedback = input_data['feedback_info']
     else:
-        response_text += f'\n\nRESULT: The request with ID={id_} does not exist or nobody is waiting for it any more!'
-    
+        feedback = reply.get_feedback_string()
+        feedback = f' -->: Failed to parse! --> ERROR: {errors}'
+        handled = False
+
+    if handled and req:
+        req = reply.mark_request_handled(req, feedback)
 
     
+    log.info(f'/user_feedback/replyform --> {could_parse=} {errors=} --> {feedback=}')
+    return {"handled": handled, "success": reply.success, "feedback": feedback, 'client': reply.client, 'id': id_, 'error': error}
 
-    return {"response": response_text, 'id': id_, 'success': res, 'input_data': input_data}
+
+"""
+
+██     ██ ███████ ██████  ██   ██  ██████   ██████  ██   ██ ███████ 
+██     ██ ██      ██   ██ ██   ██ ██    ██ ██    ██ ██  ██  ██      
+██  █  ██ █████   ██████  ███████ ██    ██ ██    ██ █████   ███████ 
+██ ███ ██ ██      ██   ██ ██   ██ ██    ██ ██    ██ ██  ██       ██ 
+ ███ ███  ███████ ██████  ██   ██  ██████   ██████  ██   ██ ███████ 
+                                                                    
+"""
+@app.get("/mattermost_webhook")
+async def mattermost_webhook_get(request: Request):
+    return {'info': 'post here from mattermost!'}
+
+
+@app.post("/mattermost_webhook")
+async def mattermost_webhook_post(request: Request):
+    tkn = config['globals'].get('mattermost_incoming')
+    data = await request.json()
+    if tkn and data.get('token') != tkn:
+        client_host = request.client.host
+        log.warning(f'Unauthorized request from {client_host}')
+        return JSONResponse(status_code=401, content={"message": "Unauthorized"})
+    
+    txt = (json.dumps(data, indent=2))
+    log.info(txt)
+
+    if data.get('trigger_word') in '#open #status'.split():
+        
+
+        args = data.get('text').split()
+        r = [feedback_requests.get(id, None) for id in feedback_requests]
+        r = '\n'.join([rr.make_markdown_li() for rr in r if rr.request_type != 'info'])
+        stati = [s for s in schema.STATUS if not s in [schema.STATUS.FAULTY, schema.STATUS.FAILED, schema.STATUS.CANCELLED, schema.STATUS.ABORTED, schema.STATUS.FAULTY, schema.STATUS.FINISHED]]
+        res = dbi.qry_scripts(stati=stati)
+        make_markdown = lambda script: f'1. {script.get_device_link_md()} | {script.get_link_md()} | {script.get_showpath_md()} | STATUS=**{script.status}**'
+        pathes = '\n'.join([make_markdown(r) for r in res])
+        if not pathes:
+            pathes = 'None'
+        if not r:
+            r = 'None'
+
+        text = f"\n#### Running Scripts:\n\n{pathes}\n\n#### Feeback Requests:\n\n{r}\n"
+    elif data.get('trigger_word') == '#reply':
+        args = data.get('text').split()
+        iargs = iter(args)
+        _ = next(iargs, '')
+        reply_for = next(iargs, '')
+        open_requests = {**{v.get_id_short():v for k, v in feedback_requests.items()}, **{v.id:v for k, v in feedback_requests.items()}}
+        req = open_requests.get(reply_for, None)
+
+        if not req is None:
+            reply_text = next(iargs, '')
+            
+            client = str(data.get('user', 'unknown')) + ' from mattermost channel ' + str(data.get('channel_name', 'unknown'))
+            reply = usr.UserFeedbackReply(id=req.id, message=str(reply_text), response_type=req.request_type, files={}, client=client)
+
+            assert reply.response_type == req.request_type, f'expected was feedback of type: {req.request_type} but given was response of type: {reply.response_type}'
+            could_parse, errors = reply.parse(allow_confirm=True)
+            if could_parse and not errors:
+                res, reply, input_data, req = _user_feedback_reply(reply)
+                input_data
+                text = f'Found Reply for feedback request "{reply_for}" ({req.request_type}): {reply_text} --> success={reply.success} value={reply.value}'
+            else:
+                text = f'Found Reply for feedback request "{reply_for}" ({req.request_type}): {reply_text} --> ERROR: {errors}'
+        else:    
+            text = f"could not match any reply for: \"{data.get('text')}\""
+
+    elif data.get('trigger_word') == '#open':
+        text = 'Not implemented yet!'
+    else:
+        text = 'unhandled case!'
+
+    ret = {
+        "response_type": "comment",
+        "username": "Jupy-Runner-" + helpers.get_primary_ip() + '-' + helpers.get_sys_id(),
+        "text": text,
+        "props": data, 
+    }   
+    return JSONResponse(ret)
+
 
 
 # # Delete a script
