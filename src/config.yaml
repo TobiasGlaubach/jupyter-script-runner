@@ -4,6 +4,7 @@ db:
 globals:
   dbserver_uri: 'http://localhost:7990'
   mattermost_uri: ''
+  mattermost_incoming: ''
   loglevel: INFO
 
 
