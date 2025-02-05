@@ -260,7 +260,7 @@ def run_script(script_id:int):
                 parameters=all_params,
                 progress_bar=False,
                 log_output=True,
-                kernel_name="python3"
+                kernel_name="python"
             )
         except (papermill.exceptions.PapermillExecutionError) as e:
             err = ''.join(traceback.format_exception(e, limit=3))
@@ -308,7 +308,7 @@ def run_script(script_id:int):
         script.time_finished = get_utcnow()
 
         script.papermill_json = nb.get('metadata', {}).get('papermill', {})
-        err = nb.get('exception', '')
+        err += str(nb.get('exception', ''))
 
         if err:
             script.status = STATUS.FAILED
@@ -333,7 +333,7 @@ def run_script(script_id:int):
         assert isinstance(res, dict) and res.get('success', False), f'trigger_upload for {script.id=} failed! {res=}'
 
         script = set_prop_remote(script.id, status=STATUS.FINISHED)
-        post = ':warning: :no_entry: **WITH ERRORS** :no_entry: :warning:' if script.errors else ''
+        post = ':warning: :no_entry: **WITH ERRORS** :no_entry: :warning:' if err else ''
 
         md = send_mattermost_status(script, post_str=post)
         send_userlog(f"Finished...", script, doc=md)
