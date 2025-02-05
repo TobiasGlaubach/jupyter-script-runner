@@ -251,6 +251,7 @@ def run_script(script_id:int):
             script.script_out_path = script.script_out_path[:-len('.html')] + '.ipynb'
 
         # Run the script using Papermill
+        err = ''
         try:
             pm_logger.info(f'SCRIPTRUNNER: starting with {script.id=} {script.status=}\n\n' + '='*200)
 
