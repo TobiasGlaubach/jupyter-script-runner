@@ -1551,15 +1551,15 @@ async def get_script_logs_qry(since: Optional[float|int] = None, only_running: O
         t = 1738700000
         script = dbi.get(schema.Script, 1)
         if not script is None:
-            script_name = os.path.basename(script.script_out_path)
+            script_uid = os.path.basename(script.script_out_path)
             script_id = 1
             device_id = script.device_id
         else:
-            script_name = ''
+            script_uid = ''
             script_id = 0
             device_id = 'no_device'
 
-        dummy = lambda x: usr.UserFeedbackRequest(message=f'Dummy Request for {x}  '*10, request_type=x, id=helpers.get_uid(), script_id=script_id, script_name=script_name, device_id=device_id, timestamp=t)
+        dummy = lambda x: usr.UserFeedbackRequest(message=f'Dummy Request for {x}  '*10, request_type=x, id=helpers.get_uid(), script_id=script_id, script_uid=script_uid, device_id=device_id, timestamp=t)
         allowed = 'confirm file files picture pictures text int float info info info'.split()
         current_requests = [dummy(x) for x in allowed]
     

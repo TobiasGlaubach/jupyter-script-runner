@@ -131,9 +131,27 @@ class BaseAPIClient:
 
 
 class ServerApi(object):
-    def __init__(self, base_url, none_on_404=False, script_id=None) -> None:
+    def __init__(self, base_url, none_on_404=False, script_id=None, script_uid=None, device_id=None) -> None:
         self.script_id = script_id
         self.api = BaseAPIClient(base_url, none_on_404)
+        self.script_uid = script_uid
+        self.device_id = device_id
+    
+    def set_script_uid(self, script_out_path=None, script_name=None, script_version=None, fallback_random=False ):
+        if script_out_path:
+            self.script_uid = os.path.splitext(os.path.basename(script_out_path))[0]
+        elif script_name and script_version:
+            self.script_uid = f'{script_name}_{script_version}_{get_uid()[-4:]}'
+        elif script_name:
+            self.script_uid = f'{script_name}_{round(time.time())}_{get_uid()[-4:]}'
+        elif fallback_random:
+            self.script_uid = get_uid(self, self.script_id)
+        else:
+            self.script_uid = None
+            
+
+    def set_script_uid_from_outfile(self, script_out_path):
+        self.script_uid = os.path.splitext(os.path.basename(script_out_path))[0]
 
     def ping(self):
         r = self.api.get(f'/ping', ret_raw=True)
@@ -180,6 +198,7 @@ class ServerApi(object):
         """
         if script_id is None:
             script_id = self.script_id
+
         assert script_id, 'script_id can not be None or empty!'
 
         route = f'/action/script/{script_id}/upload/files'
@@ -310,7 +329,7 @@ class ServerApi(object):
 
         return result
 
-    def user_info(self, msg, color='', script_id=None, request_id=None, script_name='', device_id=None, doc=None):
+    def user_info(self, msg, color='', script_id=None, request_id=None, script_uid='', device_id=None, doc=None):
         """Logs a message for the user to the server. (This will show up in the fser feedback screen)
 
         Args:
@@ -318,7 +337,7 @@ class ServerApi(object):
             color (str, optional): The color to use for the message. Defaults to ''.
             script_id (str, optional): The ID of the script. If not provided, defaults to self.script_id.
             request_id (str, optional): The ID of the request. If not provided, a new ID will be generated.
-            script_name (str, optional): The name of the script. Defaults to ''.
+            script_uid (str, optional): The name of the script. Defaults to ''.
             doc (Document, optional): A pydocmaker.Doc document to add to the post. If provided, the doc will be converted to HTML.
 
         Returns:
@@ -326,14 +345,20 @@ class ServerApi(object):
         """
 
         request_type = 'info'
+        
         if script_id is None:
             script_id = self.script_id
+        
+        if device_id is None:
+            device_id = self.device_id
+
+        if script_uid is None:
+            script_uid = self.script_uid
 
         if not request_id:
             request_id = get_uid(self, script_id)
 
         
-
         html = ''
         if not isinstance(msg, str) and hasattr(msg, 'to_html'):
             assert not doc, 'can not give doc and a doc as message!'
@@ -349,7 +374,7 @@ class ServerApi(object):
             'request_type': request_type,
             'id': request_id,
             'script_id': script_id,
-            'script_name': script_name,
+            'script_uid': script_uid,
             'device_id': device_id,
         }
 
@@ -366,7 +391,7 @@ class ServerApi(object):
         return res
     
 
-    def user_get_feedback(self, msg, request_type='confirm', script_id=None, script_name=None, request_id=None, device_id=None, t_poll_sec=2.0, verb=0, ret_all=False, doc=None):
+    def user_get_feedback(self, msg, request_type='confirm', script_id=None, script_uid=None, request_id=None, device_id=None, t_poll_sec=2.0, verb=0, ret_all=False, doc=None):
         """
         Gets user feedback through the API.
 
@@ -407,6 +432,12 @@ class ServerApi(object):
         if not request_id:
             request_id = get_uid(self, script_id)
 
+        if device_id is None:
+            device_id = self.device_id
+
+        if script_uid is None:
+            script_uid = self.script_uid
+
         allowed = 'confirm file files picture pictures text int float'.split()
 
         assert request_type in allowed, f'{request_type=} is not in {allowed=}'
@@ -425,7 +456,7 @@ class ServerApi(object):
             'request_type': request_type,
             'id': request_id,
             'script_id': script_id,
-            'script_name': script_name,
+            'script_uid': script_uid,
             'device_id': device_id,
         }
 

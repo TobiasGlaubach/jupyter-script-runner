@@ -71,7 +71,7 @@ def send_userlog(msg, script, color='grey', doc = None):
         filename_without_extension = os.path.splitext(os.path.basename(script.script_out_path))[0]
 
         api_log = capi.ServerApi(config.get('globals', {}).get('dbserver_uri'))
-        api_log.user_info(f'Scriptrunner: {msg}', color=color, script_id=script.id, script_name=filename_without_extension, device_id=script.device_id, doc=doc)
+        api_log.user_info(f'Scriptrunner: {msg}', color=color, script_id=script.id, script_uid=filename_without_extension, device_id=script.device_id, doc=doc)
     except Exception as err:
         pass
 

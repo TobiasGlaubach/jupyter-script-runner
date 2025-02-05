@@ -15,7 +15,7 @@ class UserFeedbackRequest(BaseModel):
     request_type: str
     id: str
     script_id: int|None = None
-    script_name: str|None = None
+    script_uid: str|None = None
     script_state: str|None = ''
     device_id: str|None = None
     timestamp: float|None = None
@@ -30,10 +30,10 @@ class UserFeedbackRequest(BaseModel):
         if not self.timestamp or self.timestamp <= 0:
             self.timestamp = time.time()
 
-        if not self.script_name and self.script_id:
+        if not self.script_uid and self.script_id:
             script = self.get_script()
             filename_without_extension = os.path.splitext(os.path.basename(script.script_out_path))[0]
-            self.script_name = filename_without_extension
+            self.script_uid = filename_without_extension
         
         if not self.device_name and self.script_id:
             script = self.get_script() if not script else script
@@ -45,8 +45,8 @@ class UserFeedbackRequest(BaseModel):
         if not self.script_id:
             self.script_id = 0
         
-        if not self.script_name:
-            self.script_name = f'loose_request_{self.id}'
+        if not self.script_uid:
+            self.script_uid = f'loose_request_{self.id}'
 
         return self
     
@@ -65,7 +65,7 @@ class UserFeedbackRequest(BaseModel):
         return self
 
     def get_script_uid(self) -> str:
-        return f'loose_request_{self.id}' if not self.script_name else self.script_name
+        return f'loose_request_{self.id}' if not self.script_uid else self.script_uid
 
 
     def get_id_short(self) -> str:
@@ -88,9 +88,9 @@ class UserFeedbackRequest(BaseModel):
         return s    
 
     def match_script(self, script):
-        if not (self.script_name or self.script_id):
+        if not (self.script_uid or self.script_id):
             return True
-        if self.script_name is not None and self.script_name == os.path.basename(script.script_out_path):
+        if self.script_uid is not None and self.script_uid == os.path.basename(script.script_out_path):
             return True
         if self.script_id is not None and self.script_id == script.id:
             return True
