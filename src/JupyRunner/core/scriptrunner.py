@@ -8,6 +8,8 @@ import os
 
 import yaml
 
+import pydocmaker as pyd
+
 from JupyRunner.core import schema, api_interface, filesys_storage_api
 from JupyRunner.core.schema import Script, STATUS
 from JupyRunner.core.helpers import log, get_utcnow, make_zulustr, now_iso, logging, limit_len
@@ -24,7 +26,7 @@ var_api = None
 dfi_api = None
 device_api = None
 
-
+from JupyRunner.client import api_accessor as capi
 
 
 # Create a custom log handler
@@ -45,6 +47,7 @@ class CustomHandler(logging.Handler):
 def send_mattermost_failed(script:Script, err: Exception):
     s = f'{script.get_device_link_md()} | {script.get_link_md()} | {script.get_showpath_md()} | STATUS=**{script.status}** => Error: ```{limit_len(err, 50)}```'
     send_mattermost(s, emoji=LOGGING_EMOJIES.FAIL)
+    return s
 
 def send_mattermost_status(script:Script, post_str='', emoji=None):
     if emoji:
@@ -55,7 +58,23 @@ def send_mattermost_status(script:Script, post_str='', emoji=None):
         emoji = LOGGING_EMOJIES.SUCCESS
     else:
         emoji = LOGGING_EMOJIES.EMPTY
-    send_mattermost(f'{script.get_device_link_md()} | {script.get_link_md()} | {script.get_showpath_md()} | STATUS=**{script.status}** {post_str}'.strip(), emoji = emoji)
+    s = f'{script.get_device_link_md()} | {script.get_link_md()} | {script.get_showpath_md()} | STATUS=**{script.status}** {post_str}'.strip()
+    send_mattermost(s, emoji = emoji)
+    return s
+
+def send_userlog(msg, script, color='grey', doc = None):
+    try:
+        if isinstance(doc, str):
+            d = pyd.Doc()
+            d.add_md(doc)
+            doc = d
+        filename_without_extension = os.path.splitext(os.path.basename(script.script_out_path))[0]
+
+        api_log = capi.ServerApi(config.get('globals', {}).get('dbserver_uri'))
+        api_log.user_info(f'Scriptrunner: {msg}', color=color, script_id=script.id, script_name=filename_without_extension, device_id=script.device_id, doc=doc)
+    except Exception as err:
+        pass
+
 
 def setup(cnfg):
     api_interface.setup(cnfg)
@@ -187,7 +206,7 @@ def run_script(script_id:int):
         script = get(int(script_id))
 
         log.info(f"Script {script.id}: Starting")
-        
+        send_userlog(f"Starting...", script)
 
         script = set_prop_remote(script, status = STATUS.STARTING)
 
@@ -205,7 +224,12 @@ def run_script(script_id:int):
         script = set_prop_remote(script, status = STATUS.RUNNING, time_started = get_utcnow())
         assert script.status == STATUS.RUNNING, 'status was not set to running!'
         
-        send_mattermost(f'{script.get_device_link_md()} | {script.get_link_md()} | {script.get_showpath_md()} | STATUS=**RUNNING**', emoji=':black_right_pointing_triangle_with_double_vertical_bar: ')
+        md = f'{script.get_device_link_md()} | {script.get_link_md()} | {script.get_showpath_md()} | STATUS=**RUNNING**'
+        send_mattermost(md, emoji=':black_right_pointing_triangle_with_double_vertical_bar: ')
+
+        doc = pyd.Doc()
+        doc.add_md(md)
+        send_userlog(f"Running...", script, doc=md)
 
         # Set up a logger
         pm_logger = logging.getLogger('papermill')
@@ -289,14 +313,17 @@ def run_script(script_id:int):
         if err:
             script.status = STATUS.FAILED
             script.errors += now_iso() + ' | ' + str(err)
-            send_mattermost_failed(script, err)
+            md = send_mattermost_failed(script, err)
             s = f"Script {script.id}: Finished with ERROR on {make_zulustr(script.time_finished)}"
             log.error(s)
+            send_userlog(s, script, doc=md)
+
         else:
             # Set script status to FINISHING
             script.status = STATUS.UPLOADING
             script.script_out_path = script.script_out_path.replace(".ipynb", ".html")
-            send_mattermost_status(script, emoji=':arrow_up: ')
+            md = send_mattermost_status(script, emoji=':arrow_up: ')
+            send_userlog(f"Statusupdate...", script, doc=md)
 
         script = commit(script)
 
@@ -308,7 +335,8 @@ def run_script(script_id:int):
         script = set_prop_remote(script.id, status=STATUS.FINISHED)
         post = ':warning: :no_entry: **WITH ERRORS** :no_entry: :warning:' if script.errors else ''
 
-        send_mattermost_status(script, post_str=post)
+        md = send_mattermost_status(script, post_str=post)
+        send_userlog(f"Finished...", script, doc=md)
 
         log.info(f'finished uploading {script.id=} {script.status=}')
         post = ' WITH ERRORS!!!\n' if script.errors else ''
@@ -322,5 +350,7 @@ def run_script(script_id:int):
         script.status = STATUS.FAULTY
         script.append_error_msg(traceback.format_exc())  # Store traceback info
         commit(script)
-        send_mattermost_failed(script, e)
+        md = send_mattermost_failed(script, e)
+        send_userlog(f"Finished...", script, doc=md)
+
         return None  # Indicate error

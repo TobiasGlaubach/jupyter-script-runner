@@ -15,6 +15,25 @@
 
 
 <div style="margin-left: 10px; margin-right: 10px;">
+    
+
+        <h5>Quick Add Script To Run Now With Default Params:</h5>
+        <div class="input-group input-group-sm mb-1">
+            <div class="input-group-prepend">
+                <span class="input-group-text" style="min-width: 180px;"><b>script_in_path</b></span>
+            </div>
+            <select class="custom-select" id="intr-inp-newex-pthin">
+
+            </select>
+            <div class="input-group-prepend">
+                <span class="input-group-text" style="min-width: 180px;"><b>device_id</b></span>
+            </div>
+            <select class="custom-select" id="intr-inp-newex-device" aria-placeholder="e.G: RxS001">
+
+            </select>
+            <button class="btn btn-warning ml-2" type="button" id="intr-btn-newex-commit-provider" style="min-width: 80px;">COMMIT</button>
+            <button class="btn btn-secondary ml-2" type="button" id="intr-btn-globals-reload" style="min-width: 80px;">RELOAD</button>
+        </div>
 
         <h3>User Live Feedback:</h3>
         <small>(for currently active user feedback) | <a href="?dummy=1">Click here to show some dummy requests</a> | <span id="last_tick"></span> <span id="last_tick_ago"></span></small>
@@ -164,7 +183,7 @@
         card.innerHTML = `<div class="card-header" id="${cardUId}_heading">
       <h2 class="mb-0">
         <button class="btn btn-link btn-block text-left collapsed" type="button" data-toggle="collapse" data-target="#${cardUId}_content_div" aria-expanded="true" aria-controls="collapseOne">
-            <span><b>Script with ${tp}:</b>: ${cardUId}${status}<strong> status=</strong><strong id="${cardUId}_status">"${scriptInfo.script_status}"</strong></span>
+            <span><b>Script with ${tp}:</b>: ${cardUId}${status}<strong> status=</strong><strong id="${cardUId}_status">"${scriptInfo.script_status}"</strong> <span id="${cardUId}_lastreq_info"></span></span>
         </button>
       </h2>
     </div>
@@ -195,12 +214,12 @@
         }   
         
         const statusEl = document.getElementById(`${script_uid}_status`);
-        if (data.hasOwnProperty("script_status") && data.script_status) {
+        if (data.hasOwnProperty("script_state") && !isEmpty(data.script_state)) {
             
-            statusEl.innerText = data.script_status;
-            if ("FAILED CANCELLED STATUS.ABORTED FAULTY".split(' ').includes(data.script_status)) {
+            statusEl.innerText = data.script_state;
+            if ("FAILED CANCELLED STATUS.ABORTED FAULTY".split(' ').includes(data.script_state)) {
                 statusEl.style.color = 'red';
-            } else if (data.script_status == "FINISHED") {
+            } else if (data.script_state == "FINISHED") {
                 statusEl.style.color = 'green';
             } else {
                 statusEl.style.color = 'blue';
@@ -219,6 +238,11 @@
             logs.appendChild(createForm(data));
             logs.scrollTop = logs.scrollHeight;
         }
+
+        const lastReq = document.getElementById(`${script_uid}_lastreq_info`);
+        const txt = data.message.length > 30 ? (data.message.substring(0, 30) + '...') : data.message;
+        lastReq.innerText = `Last Request: "${data.request_type}" request with Prompt: "${txt}"`;
+        
     }
 
 
@@ -415,6 +439,120 @@
         button.disabled = true;
     }
 
+    async function queryAPI(endpoint, kwargs) {
+        var url = endpoint;
+        if (kwargs) {
+            const urlParams = new URLSearchParams(kwargs);
+            url = `${endpoint}?${urlParams}`;
+        }
+
+        console.log(`querying ${url}`);
+
+        try {
+            const response = await fetch(url);
+            if (!response.ok) {
+                throw `response for ${url} is not OK!`;
+            }
+            const data = await response.json();
+            return data;
+        } catch (error) {
+            console.error('Error fetching data:', error);
+            throw error; 
+        }
+    }
+    function addOptionsToSelect(selectId, optionsList, valueList) {
+        for (let i = 0; i < optionsList.length; i++) {
+            $(`#${selectId}`).append('<option value="'+valueList[i]+'">'+optionsList[i]+'</option>');
+        }
+    }
+
+    async function getRepo(){
+        return await queryAPI('/repo/get/all');
+    // files_repo = list(set(list(files_repo_dc.keys())))
+    }
+
+    async function getDeviceIds(){
+        return await queryAPI('/qry/ids/device');
+    // files_repo = list(set(list(files_repo_dc.keys())))
+    }
+    
+    async function reload_globals(giveFeedback) {
+        try {
+            files_repo_dc = await getRepo();
+            var files_repo = Object.keys(files_repo_dc);
+            document.getElementById('intr-inp-newex-pthin').innerHTML = '';
+            addOptionsToSelect('intr-inp-newex-pthin', files_repo, files_repo);
+            
+            var deviceIds = await getDeviceIds();
+            document.getElementById('intr-inp-newex-device').innerHTML = '';
+            addOptionsToSelect('intr-inp-newex-device', deviceIds, deviceIds);
+
+            if (giveFeedback) {
+                alert('reload_globals --> success');
+            }
+            
+
+        } catch (error) {
+            let s = `reload_globals --> ERROR: ` + error;
+            alert(s);
+        }
+    }
+
+    document.getElementById('intr-btn-globals-reload').addEventListener('click', async () => {
+            reload_globals(1);
+        });
+
+
+    async function upload() {
+        try { 
+            const script_in_path = document.getElementById('intr-inp-newex-pthin').value;
+            const device_id = document.getElementById('intr-inp-newex-device').value;
+
+            var kwargs = {'script_in_path': script_in_path}
+
+            if (device_id) {
+                kwargs['device_id'] = device_id;
+            }
+            
+            inp = `\n\nscript=${script_in_path}\n\ndevice_id=${device_id}`;
+
+            // Prepare the PATCH request
+            fetch('/action/script/run', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(kwargs)
+            })
+            .then(response => {
+                if (!response.ok) {
+                    console.error(response);
+                }
+                return response.json()
+            })
+            .then(result => {
+                alert(result.color + '\n Commit new Script : ' + inp + '\n-->' + result.info);
+                console.log('Commit Result', result);
+            })
+            .catch(error => {
+                let s = 'Commit new Script : ' + inp + '\n-->' + `ERROR while uploading: ${error}`;
+                alert(s);
+                console.error(s, error);
+            });
+
+        } catch (error) {
+            let s = `ERROR while uploading: ${error}`;
+            alert(s);
+            console.error(s, error);
+        }
+    
+    }
+    
+    document.getElementById('intr-btn-newex-commit-provider').addEventListener('click', async () => {
+        await upload();
+    });
+
+    reload_globals(0);
 
     let since = null;
     let lastTick = new Date();

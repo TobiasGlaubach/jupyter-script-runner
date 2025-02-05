@@ -310,7 +310,7 @@ class ServerApi(object):
 
         return result
 
-    def user_info(self, msg, color='', script_id=None, request_id=None, script_name='', doc=None):
+    def user_info(self, msg, color='', script_id=None, request_id=None, script_name='', device_id=None, doc=None):
         """Logs a message for the user to the server. (This will show up in the fser feedback screen)
 
         Args:
@@ -349,7 +349,8 @@ class ServerApi(object):
             'request_type': request_type,
             'id': request_id,
             'script_id': script_id,
-            'script_name': script_name
+            'script_name': script_name,
+            'device_id': device_id,
         }
 
         if color or html:
@@ -365,7 +366,7 @@ class ServerApi(object):
         return res
     
 
-    def user_get_feedback(self, msg, request_type='confirm', script_id=None, request_id=None, t_poll_sec=2.0, verb=0, ret_all=False, doc=None):
+    def user_get_feedback(self, msg, request_type='confirm', script_id=None, script_name=None, request_id=None, device_id=None, t_poll_sec=2.0, verb=0, ret_all=False, doc=None):
         """
         Gets user feedback through the API.
 
@@ -424,6 +425,8 @@ class ServerApi(object):
             'request_type': request_type,
             'id': request_id,
             'script_id': script_id,
+            'script_name': script_name,
+            'device_id': device_id,
         }
 
         if html:

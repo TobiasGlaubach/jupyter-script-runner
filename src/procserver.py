@@ -23,6 +23,8 @@ if __name__ == '__main__':
 from JupyRunner.core import schema, filesys_storage_api
 from JupyRunner.core import scriptrunner as runner
 
+from JupyRunner.client import api_accessor as capi
+
 from JupyRunner.core.helpers import get_utcnow, make_zulustr, parse_zulutime, log, set_loglevel, get_primary_ip, load_config
 from JupyRunner.core.helpers_mattermost import send_mattermost, LOGGING_EMOJIES
 
@@ -46,6 +48,8 @@ for module in modules:
 
 
 api = runner.api
+api_log = capi.ServerApi(config.get('globals', {}).get('dbserver_uri'))
+
 run_directly = config.get('procserver', {}).get('do_direct_running', 0)
 
 commit = runner.commit
@@ -120,6 +124,20 @@ def finish(p, id):
         s += f'\nError Message: ```{str(err)}```'
         s += f'\nSTATUS NEW: **FAILED**'
         send_mattermost(s, emoji=LOGGING_EMOJIES.FAIL)
+
+        filename_without_extension = os.path.splitext(os.path.basename(obj.script_out_path))[0]
+
+        try:
+            api_log.user_info('Procserver: ' + s, color='red', script_id=id, script_name=filename_without_extension, device_id=obj.device_id)
+        except Exception as err:
+            pass
+        
+
+    else:
+        try:
+            api_log.user_info('Procserver: FINISHED', color='grey', script_id=id, script_name=filename_without_extension, device_id=obj.device_id)
+        except Exception as err:
+            pass
 
     return id
 
