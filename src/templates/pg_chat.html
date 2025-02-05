@@ -121,8 +121,8 @@
         if (data.script_id) {
             a += ` <b>Script ID:</b>: <code>"${data.script_id}"</code>`;
         }
-        if (data.script_name) {
-            a += ` <b>Script Name:</b>: <code>"${data.script_name}"</code>`;
+        if (data.script_uid) {
+            a += ` <b>Script Name:</b>: <code>"${data.script_uid}"</code>`;
         }
 
         headerElement.innerHTML = `<small>${a}</small>`;
@@ -214,8 +214,8 @@
             if (data[key].script_id) {
                 a += ` <b>Script ID:</b>: <code>"${data[key].script_id}"</code>`;
             }
-            if (data[key].script_name) {
-                a += ` <b>Script Name:</b>: <code>"${data[key].script_name}"</code>`;
+            if (data[key].script_uid) {
+                a += ` <b>Script Name:</b>: <code>"${data[key].script_uid}"</code>`;
             }
             if (data[key].id) {
                 a += ` <b>ID:</b>: <code>"${data[key].id}"</code>`;
