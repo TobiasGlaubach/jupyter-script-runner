@@ -235,7 +235,7 @@
         
 
         const logs = document.getElementById(`${scriptUid}_logs`);
-        if (!isEmpty(logs)) {
+        if (logs) {
             if (data.request_type === 'info' || data.handled === 1) {
                 logs.appendChild(createInfoLog(data));
                 logs.scrollTop = logs.scrollHeight;
