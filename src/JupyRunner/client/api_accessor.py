@@ -329,7 +329,7 @@ class ServerApi(object):
 
         return result
 
-    def user_info(self, msg, color='', script_id=None, request_id=None, script_uid='', device_id=None, doc=None):
+    def user_info(self, msg, color='', script_id=None, request_id=None, script_uid=None, device_id=None, doc=None):
         """Logs a message for the user to the server. (This will show up in the fser feedback screen)
 
         Args:
@@ -349,10 +349,10 @@ class ServerApi(object):
         if script_id is None:
             script_id = self.script_id
         
-        if device_id is None:
+        if not device_id:
             device_id = self.device_id
 
-        if script_uid is None:
+        if not script_uid:
             script_uid = self.script_uid
 
         if not request_id:
@@ -386,7 +386,7 @@ class ServerApi(object):
         if html:
             data["kwargs"]["html"] = html
 
-        log.info(f'Sending User Info with {request_id=} {request_type=} and {script_id=}. Message = {limit_len(msg, 200)}')
+        log.info(f'Sending User Info with {request_id=} {request_type=} and {script_uid=}|{script_id=}. Message = {limit_len(msg, 200)}')
         res = self.api.post(route, json=data, ret_raw=True).json()
         return res
     
@@ -463,7 +463,7 @@ class ServerApi(object):
         if html:
             data["kwargs"] = {"html": html}
 
-        log.info(f'Requesting User Feedback with {request_id=} {request_type=} and {script_id=}. Message = {limit_len(msg, 200)}')
+        log.info(f'Requesting User Feedback with {request_id=} {request_type=} and {script_uid=}|{script_id=}. Message = {limit_len(msg, 200)}')
         res = self.api.post(route, json=data, ret_raw=True).json()
 
 

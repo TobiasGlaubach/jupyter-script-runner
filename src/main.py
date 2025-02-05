@@ -1502,12 +1502,17 @@ async def user_feedback_create(req: usr.UserFeedbackRequest)-> Dict[str, Any]:
 
     id_ = req.id
     global feedback_requests, feedback_answers
+    # log.debug('/user_feedback/create')
+    # log.debug(json.dumps(req.__dict__))
+
     if id_ in feedback_requests:
         raise HTTPException(400 , f'request with {id_=} already exists!')
     try:
         req.populate_empty_fields()
+        log.debug('/user_feedback/create')
     except Exception as err:
-        pass
+        log.debug('error in populating empty fields...')
+        log.error(err)
     
     limit_number_of_open_feedbacks()
     feedback_requests[id_] = req        

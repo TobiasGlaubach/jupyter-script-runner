@@ -35,12 +35,12 @@ class UserFeedbackRequest(BaseModel):
             filename_without_extension = os.path.splitext(os.path.basename(script.script_out_path))[0]
             self.script_uid = filename_without_extension
         
-        if not self.device_name and self.script_id:
+        if not self.device_id and self.script_id:
             script = self.get_script() if not script else script
             self.device_id = script.device_id  
 
-        if not self.device_name:
-            self.device_name = 'no_device'
+        if not self.device_id:
+            self.device_id = 'no_device'
 
         if not self.script_id:
             self.script_id = 0
