@@ -47,3 +47,4 @@ procserver:
   t_interval: 15
   run_script_path: run_script.py
   pythonpath_for_win: 'python'
+  user_info_verbosity: 2 # 0=no user info, 1=only text, 2=text and markdown
