@@ -15,24 +15,16 @@ from JupyRunner.core import helpers
 
 
 url = None
-
+dbserver_uri = None
 
 def setup(config):
-    global url
+    global url, dbserver_uri
     url = config['globals']['mattermost_uri']
-    
+    dbserver_uri = config['globals']['dbserver_uri']
 
 def start(config):
     pass
 
-
-def setup(config):
-    global url
-    url = config['globals']['mattermost_uri']
-    
-
-def start(config):
-    pass
 
 class LOGGING_EMOJIES(enum.auto):
     WARNING = ':warning: '
@@ -72,8 +64,6 @@ def send_mattermost(subject, emoji = ''):
 
 def handle_webhook_request(data, feedback_requests, _user_feedback_reply) -> dict:
     try:
-
-
         if data.get('trigger_word') in '#open #status'.split():
             
 
@@ -124,7 +114,7 @@ def handle_webhook_request(data, feedback_requests, _user_feedback_reply) -> dic
                 if not obj:
                     text.append(f'## Script "{id_}"\n\n **ERROR**: The script with {id_=} was not found!')
                 else:
-                    text.append(obj.to_md(base_url=url))
+                    text.append(obj.to_md(base_url=dbserver_uri))
             text = '\n\n'.join(text)
         elif data.get('trigger_word') == '#d' or data.get('trigger_word') == '#device':
             args = shlex.split(data.get('text')) 
@@ -136,7 +126,7 @@ def handle_webhook_request(data, feedback_requests, _user_feedback_reply) -> dic
                 if not obj:
                     text.append(f'## Device "{id_}"\n\n **ERROR**: The device with {id_=} was not found!')
                 else:
-                    text.append(obj.to_md(base_url=url))
+                    text.append(obj.to_md(base_url=dbserver_uri))
 
             text = '\n\n'.join(text)
         elif data.get('trigger_word') == '#result' or data.get('trigger_word') == '#datafile':
@@ -149,7 +139,7 @@ def handle_webhook_request(data, feedback_requests, _user_feedback_reply) -> dic
                 if not obj:
                     text.append(f'## Datafile "{id_}"\n\n **ERROR**: The datafile with {id_=} was not found!')
                 else:
-                    text.append(obj.to_md(base_url=url))
+                    text.append(obj.to_md(base_url=dbserver_uri))
             text = '\n\n'.join(text)
         elif data.get('trigger_word') == '#l' or data.get('trigger_word') == '#list' or data.get('trigger_word') == '#lastn' or data.get('trigger_word') == '#last':
             args = shlex.split(data.get('text'))  
@@ -159,7 +149,7 @@ def handle_webhook_request(data, feedback_requests, _user_feedback_reply) -> dic
             table_header = "| ID | Script Out Path | Status | Comments |\n| --- | --- | --- | --- |\n"
             table_rows = ""
             for script in scripts:
-                script_out_path_link = f"[{os.path.basename(script.script_out_path)}]({url}/show/{script.script_out_path})"
+                script_out_path_link = f"[{os.path.basename(script.script_out_path)}]({dbserver_uri}/show/{script.script_out_path})"
                 table_rows += f"| {script.id} | {script_out_path_link} | {script.status} | {helpers.limit_len(script.comments, 50)} |\n"
             
             text = f'## Last {N=} Scripts\n\n' + table_header + table_rows
@@ -183,7 +173,7 @@ def handle_webhook_request(data, feedback_requests, _user_feedback_reply) -> dic
             val = args.pop(0)
             obj = dbi.set_property(type_cls, id_, **{prop:val})
             text = f':white_check_mark: SUCCESS: updated {clsname}[{id_}].{prop} = {val} (with {type(val)=})\n new object below:'
-            text += '\n\n---\n\n' + obj.to_md(url)
+            text += '\n\n---\n\n' + obj.to_md(dbserver_uri)
             
         elif data.get('trigger_word') == '#help' or data.get('trigger_word') == '#h':
             text = ''' ## Webhook API for JupyRun: 

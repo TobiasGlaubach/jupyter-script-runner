@@ -728,8 +728,8 @@ async def ids_projectvariable(script_id:int):
 @app.get("/pprint/script")
 @app.get("/pprint/script/{script_id}")
 async def pprint_scripts(script_id:int|None=None, formt:str='html'):
-    url = config.get('globals', {}).get('dbserver_url')
-    print(f'{type(script_id)} {script_id=}')
+    url = config.get('globals', {}).get('dbserver_uri')
+    print(f'{type(script_id)} {script_id=} {url=}')
 
     if script_id is None:    
         scripts = dbi.get_all(schema.Script)
@@ -758,7 +758,7 @@ async def pprint_scripts(script_id:int|None=None, formt:str='html'):
 @app.get("/pprint/device")
 @app.get("/pprint/device/{device_id}")
 async def pprint_scripts(device_id:int|None=None, formt:str='html'):
-    url = config.get('globals', {}).get('dbserver_url')
+    url = config.get('globals', {}).get('dbserver_uri')
     print(f'{type(device_id)} {device_id=}')
 
     if device_id is None:    
@@ -789,7 +789,7 @@ async def pprint_scripts(device_id:int|None=None, formt:str='html'):
 @app.get("/pprint/datafile")
 @app.get("/pprint/datafile/{datafile_id}")
 async def pprint_scripts(datafile_id:int|None=None, formt:str='html'):
-    url = config.get('globals', {}).get('dbserver_url')
+    url = config.get('globals', {}).get('dbserver_uri')
     print(f'{type(datafile_id)} {datafile_id=}')
 
     if datafile_id is None:    
@@ -1739,7 +1739,7 @@ async def mattermost_webhook_get(request: Request):
 async def mattermost_webhook_post(request: Request):
     
     global feedback_requests, feedback_answers
-    url = config.get('globals', {}).get('dbserver_url')
+
 
     tkn = config['globals'].get('mattermost_incoming')
     data = await request.json()
