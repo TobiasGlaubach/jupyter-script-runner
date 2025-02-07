@@ -6,6 +6,7 @@ import traceback
 from sqlmodel import Session, create_engine, SQLModel, select
 # from sqlalchemy.orm import select_related
 from JupyRunner.core import schema, helpers
+from sqlalchemy import desc
 
 
 log = helpers.log
@@ -180,6 +181,14 @@ def get_n(data_type:type, n_max:int):
             q.limit(n_max)
         return session.exec(q).all()
 
+
+def get_last_n(data_type:type, n_max:int):
+    with Session(engine) as session:
+        q = select(data_type).order_by(desc(data_type.id))
+        if n_max > 0:
+            q = q.limit(n_max)
+        return session.exec(q).all()
+    
 def qry_scripts(t_min:datetime.datetime|None=None, 
                 t_max:datetime.datetime|None=None, 
                 stati:schema.STATUS|None=None,
