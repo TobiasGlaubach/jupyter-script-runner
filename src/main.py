@@ -1831,16 +1831,16 @@ async def mattermost_webhook_post(request: Request):
                 else:
                     text.append(obj.to_md(base_url=url))
             text = '\n\n'.join(text)
-        elif data.get('trigger_word') == '#list' or data.get('trigger_word') == '#lastn':
+        elif data.get('trigger_word') == '#list' or data.get('trigger_word') == '#lastn' or data.get('trigger_word') == '#last':
             args = data.get('text').split()   
             args.pop(0)
             N = int(next(iter(args), 5))
             scripts = dbi.get_last_n(schema.Script, N)
-            table_header = "| ID | Script Out Path | Status |\n| --- | --- | --- |\n"
+            table_header = "| ID | Script Out Path | Status | Comments |\n| --- | --- | --- | --- |\n"
             table_rows = ""
             for script in scripts:
                 script_out_path_link = f"[{os.path.basename(script.script_out_path)}]({url}/show/{script.script_out_path})"
-                table_rows += f"| {script.id} | {script_out_path_link} | {script.status} |\n"
+                table_rows += f"| {script.id} | {script_out_path_link} | {script.status} | {helpers.limit_len(script.comments, 50)} |\n"
             
             text = f'## Last {N=} Scripts\n\n' + table_header + table_rows
 

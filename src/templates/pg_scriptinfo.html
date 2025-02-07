@@ -186,15 +186,41 @@
     }
 
 
+    
+    function showScriptCard(scriptInfo, doShow) {
+        try {
+            var request_list = document.getElementById('request_list');
+            
+            if(!scriptInfo || scriptInfo.length < 1 || isEmpty(scriptInfo)){
+                return;
+            }
+            const accordionItems = requestList.querySelectorAll('.accordion-item');
+            accordionItems.forEach(item => {
+                const collapseElement = item.querySelector('.collapse');
+                if (collapseElement.classList.contains('show')) {
+                    collapseElement.classList.remove('show');
+                }
+            });
+            const cardUId = getScriptUid(scriptInfo);
+            
+            const collapseElement = document.getElementById(`${cardUId}_content_div`);
+            if (collapseElement.classList.contains('show')) {
+                collapseElement.classList.remove('show');
+            }
+        } catch (error) {
+            console.error('ERROR in showScriptCard');
+            console.error(error);
+        }
 
-    function makeScriptCard(scriptInfo) {
+    }
+
+    function makeScriptCard(scriptInfo, doShow) {
         
         var request_list = document.getElementById('request_list');
         
         if(!scriptInfo || scriptInfo.length < 1 || isEmpty(scriptInfo)){
             return;
         }
-        const doShow = request_list.childElementCount < 1;
         const cardUId = getScriptUid(scriptInfo);
 
         var content = '';
@@ -220,6 +246,7 @@
         const tp = scriptInfo.script_uid ? 'Name' : 'ID';
         const tp2 = scriptInfo.script_uid ? 'Script' : 'Request';
         const card = document.createElement('div');
+        
         card.className = "card";
         const s = doShow ? " show" : "";
         
@@ -247,14 +274,26 @@
         return cardUId;
     }
     
-    function handleServerInput(data) {
+    function handleServerInput(data, isNewest) {
         
         const scriptUid = getScriptUid(data);
         const el = document.getElementById(`${scriptUid}_logs`);
         console.log(data, el);
         if (!el) {
-            makeScriptCard(data);
-        }   
+            if(isNewest) {
+                var request_list = document.getElementById('request_list');
+                const accordionItems = requestList.querySelectorAll('.accordion-item');
+                accordionItems.forEach(item => {
+                    const collapseElement = item.querySelector('.collapse');
+                    if (collapseElement.classList.contains('show')) {
+                        collapseElement.classList.remove('show');
+                    }
+                });
+            }
+            makeScriptCard(data, isNewest);
+        }  else if (isNewest) {
+            showScriptCard(data, isNewest);
+        }
         
         const statusEl = document.getElementById(`${scriptUid}_status`);
         if (data.hasOwnProperty("script_state") && !isEmpty(data.script_state)) {
@@ -770,10 +809,18 @@
                 .then(response => response.json())
                 .then(data => {
                     console.log(data);
-                    var t = -1.0;
+                    let t = -1.0;
+                    let maxIndex = -1;
+
                     for (let i = 0; i < data.length; i++) {
-                        handleServerInput(data[i]);
-                        t = (data[i].timestamp && data[i].timestamp > t) ? data[i].timestamp : t;
+                        if (data[i].timestamp && data[i].timestamp > t) {
+                            t = data[i].timestamp;
+                            maxIndex = i;
+                        }
+                    }
+                    
+                    for (let i = 0; i < data.length; i++) {
+                        handleServerInput(data[i], maxIndex===i);
                     }               
                     if (t > 0 ) { since = t; }
                 })

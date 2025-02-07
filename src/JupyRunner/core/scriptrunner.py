@@ -356,7 +356,7 @@ def run_script(script_id:int):
         post += '\n\n' + '='*200
         pm_logger.info(f'SCRIPTRUNNER: finished with {script.id=} {script.status=}' + post)
 
-        md = script.to_md(url)
+        md = '---\n\n' + script.to_md(url)
         
         send_userlog(f"DONE... here are your results:", script, doc=md, force_doc=True)
 
