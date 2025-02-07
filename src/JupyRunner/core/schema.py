@@ -312,7 +312,50 @@ class Script(SQLModel, table=True):
         else:
             return self.script_name if self.script_name else f'script_{self.id}'
 
-    
+
+    def to_md(self, base_url):
+
+        dirName = self.get_script_dir()
+        
+        if self.comments:
+            comments = f'### Comments:\n\n`{self.comments}`'
+        else:
+            comments = ''
+
+        if self.errors:
+            err_str = f'### Errors:\n\n`{helpers.limit_len(self.errors, 200, "R")}`'
+        else:
+            err_str = ''
+
+
+        if self.docs_json:
+            docs_str = '\n'.join([f'- [{key}]({lnk})' for key, lnk in self.docs_json.items()])
+            doc_str = f'### Generated-Reports:\n\n{docs_str}'
+        else:
+            doc_str = ''
+
+        markdown_string = f"""
+## Script {self.id} Details
+
+- **ID:** [{self.id}]({base_url}/script/{self.id})
+- **Device ID:** [{self.device_id}]({base_url}/device/{self.device_id})
+- **Script-Parameters:** [{helpers.limit_len(self.script_params_json, 50)}]({base_url}/qry/script/{self.id}/params)
+- **Status:** {self.status}
+- **Time Started:** `{self.time_started}`
+- **Time Finished:** `{self.time_started}`
+- **Logs**: [python execution logs.txt]({base_url}/show/{dirName}/papermill_logs.txt)
+- **Script:** [{os.path.basename(self.script_out_path)}]({base_url}/show/{self.script_out_path})
+- **Result-Files:** [N={len(self.datafiles)} Datafiles]({base_url}/qry/script/{self.id}/datafiles)
+
+{comments}
+
+{doc_str}
+
+{err_str}
+        """.strip()
+
+        return markdown_string
+
 class Datafile(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     script_id: int = Field(nullable=False, foreign_key="script.id")
