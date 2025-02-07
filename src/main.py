@@ -1737,126 +1737,28 @@ async def mattermost_webhook_get(request: Request):
 
 @app.post("/mattermost_webhook")
 async def mattermost_webhook_post(request: Request):
-
-    try:
-        url = config.get('globals', {}).get('dbserver_url')
-
-        tkn = config['globals'].get('mattermost_incoming')
-        data = await request.json()
-        if tkn and data.get('token') != tkn:
-            client_host = request.client.host
-            log.warning(f'Unauthorized request from {client_host}')
-            return JSONResponse(status_code=401, content={"message": "Unauthorized"})
-        
-        txt = (json.dumps(data, indent=2))
-        log.info(txt)
-
-        if data.get('trigger_word') in '#open #status'.split():
-            
-
-            args = data.get('text').split()
-            r = [feedback_requests.get(id, None) for id in feedback_requests]
-            r = '\n'.join([rr.make_markdown_li() for rr in r if rr.request_type != 'info'])
-            stati = [s for s in schema.STATUS if not s in [schema.STATUS.FAULTY, schema.STATUS.FAILED, schema.STATUS.CANCELLED, schema.STATUS.ABORTED, schema.STATUS.FAULTY, schema.STATUS.FINISHED]]
-            res = dbi.qry_scripts(stati=stati)
-            make_markdown = lambda script: f'1. {script.get_device_link_md()} | {script.get_link_md()} | {script.get_showpath_md()} | STATUS=**{script.status}**'
-            pathes = '\n'.join([make_markdown(r) for r in res])
-            if not pathes:
-                pathes = 'None'
-            if not r:
-                r = 'None'
-
-            text = f"\n#### Running Scripts:\n\n{pathes}\n\n#### Feeback Requests:\n\n{r}\n"
-        elif data.get('trigger_word') == '#reply':
-            args = data.get('text').split()
-            iargs = iter(args)
-            _ = next(iargs, '')
-            reply_for = next(iargs, '')
-            open_requests = {**{v.get_id_short():v for k, v in feedback_requests.items()}, **{v.id:v for k, v in feedback_requests.items()}}
-            req = open_requests.get(reply_for, None)
-
-            if not req is None:
-                reply_text = next(iargs, '')
-                
-                client = str(data.get('user', 'unknown')) + ' from mattermost channel ' + str(data.get('channel_name', 'unknown'))
-                reply = usr.UserFeedbackReply(id=req.id, message=str(reply_text), response_type=req.request_type, files={}, client=client)
-
-                assert reply.response_type == req.request_type, f'expected was feedback of type: {req.request_type} but given was response of type: {reply.response_type}'
-                could_parse, errors = reply.parse(allow_confirm=True)
-                if could_parse and not errors:
-                    res, reply, input_data, req = _user_feedback_reply(reply)
-                    input_data
-                    text = f'Found Reply for feedback request "{reply_for}" ({req.request_type}): {reply_text} --> success={reply.success} value={reply.value}'
-                else:
-                    text = f'Found Reply for feedback request "{reply_for}" ({req.request_type}): {reply_text} --> ERROR: {errors}'
-            else:    
-                text = f"could not match any reply for: \"{data.get('text')}\""
-
-        elif data.get('trigger_word') == '#open':
-            text = 'Not implemented yet!'
-        elif data.get('trigger_word') == '#exp' or data.get('trigger_word') == '#script':
-            args = data.get('text').split()   
-            args.pop(0)
-            text = []
-
-            for id_ in args:
-                obj = dbi.get(schema.Script, int(id_))
-                if not obj:
-                    text.append(f'## Script "{id_}"\n\n **ERROR**: The script with {id_=} was not found!')
-                else:
-                    text.append(obj.to_md(base_url=url))
-            text = '\n\n'.join(text)
-        elif data.get('trigger_word') == '#device':
-            args = data.get('text').split()   
-            args.pop(0)
-            text = []
-
-            for id_ in args:
-                obj = dbi.get(schema.Device, id_)
-                if not obj:
-                    text.append(f'## Device "{id_}"\n\n **ERROR**: The device with {id_=} was not found!')
-                else:
-                    text.append(obj.to_md(base_url=url))
-
-            text = '\n\n'.join(text)
-        elif data.get('trigger_word') == '#result' or data.get('trigger_word') == '#datafile':
-            args = data.get('text').split()   
-            args.pop(0)
-            text = []
-
-            for id_ in args:
-                obj = dbi.get(schema.Datafile, int(id_))
-                if not obj:
-                    text.append(f'## Datafile "{id_}"\n\n **ERROR**: The datafile with {id_=} was not found!')
-                else:
-                    text.append(obj.to_md(base_url=url))
-            text = '\n\n'.join(text)
-        elif data.get('trigger_word') == '#list' or data.get('trigger_word') == '#lastn' or data.get('trigger_word') == '#last':
-            args = data.get('text').split()   
-            args.pop(0)
-            N = int(next(iter(args), 5))
-            scripts = dbi.get_last_n(schema.Script, N)
-            table_header = "| ID | Script Out Path | Status | Comments |\n| --- | --- | --- | --- |\n"
-            table_rows = ""
-            for script in scripts:
-                script_out_path_link = f"[{os.path.basename(script.script_out_path)}]({url}/show/{script.script_out_path})"
-                table_rows += f"| {script.id} | {script_out_path_link} | {script.status} | {helpers.limit_len(script.comments, 50)} |\n"
-            
-            text = f'## Last {N=} Scripts\n\n' + table_header + table_rows
-
-        else:
-            text = f':x: :fire: ERROR: unhandled case!\n\n```\n{json.dumps(data, indent=2)}\n```'
-
-
-    except Exception as err:
-        text = f':x: :fire: ERROR: {err} :fire: :x:'
     
+    global feedback_requests, feedback_answers
+    url = config.get('globals', {}).get('dbserver_url')
+
+    tkn = config['globals'].get('mattermost_incoming')
+    data = await request.json()
+    if tkn and data.get('token') != tkn:
+        client_host = request.client.host
+        log.warning(f'Unauthorized request from {client_host}')
+        return JSONResponse(status_code=401, content={"message": "Unauthorized"})
+    
+    txt = (json.dumps(data, indent=2))
+    log.info(txt)
+    
+    text = helpers_mattermost.handle_webhook_request(data, feedback_requests, _user_feedback_reply)
     ret = {
         "response_type": "comment",
         "username": "Jupy-Runner-" + helpers.get_primary_ip() + '-' + helpers.get_sys_id(),
         "text": text,
         "props": data, 
     }   
+
     return JSONResponse(ret)
 
 
