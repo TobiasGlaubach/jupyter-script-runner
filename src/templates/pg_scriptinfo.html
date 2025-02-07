@@ -236,7 +236,8 @@
         <div id="container">
             ${content}
         </div>
-        <button onclick="clearScript('${cardUId}', this)" class="btn btn-warning">Clear script</button>
+        <button onclick="clearScript('${cardUId}', this)" class="btn btn-warning">Clear Script</button>
+        <button onclick="saveHtmlElementAsFile('${cardUId}_logs')" class="btn btn-secondary">Save This Output</button>
       </div>
       
     </div>`;
@@ -695,6 +696,57 @@
     document.getElementById('intr-btn-newex-commit-provider').addEventListener('click', async () => {
         await upload();
     });
+
+    function sanitizeFilename(filename) {
+        // Remove leading/trailing whitespace
+        filename = filename.trim();
+
+        // Replace invalid characters with underscores
+        filename = filename.replace(/[<>:"/\\|?*\x00-\x1F]/g, "_");
+
+        // Limit the filename length to 255 characters
+        filename = filename.substring(0, 255);
+
+        // Remove trailing periods and whitespace
+        filename = filename.replace(/\.+$/, "").trim();
+
+        // If the filename is empty, use a default name
+        if (filename === "") {
+            filename = "file";
+        }
+        return filename;
+    }
+
+    function saveHtmlElementAsFile(elementId) {
+        // Get the HTML element by its ID
+        const element = document.getElementById(elementId);
+
+        // If the element does not exist, log an error message and return
+        if (!element) {
+            alert(`ERROR: Element with ID "${elementId}" does not exist`);
+            return;
+        }
+
+        // Create a Blob object from the HTML content
+        const blob = new Blob([element.innerHTML], { type: "text/html" });
+
+        // Create a URL for the Blob object
+        const url = URL.createObjectURL(blob);
+
+        // Create a temporary link element to trigger the save file dialog
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = elementId + ".html";
+        link.download = link.download.replace(/\.html_logs$/, "_logs").replace(/\.ipynb_logs$/, "_logs");
+
+        // Add the link element to the document and click it to trigger the save file dialog
+        document.body.appendChild(link);
+        link.click();
+        // Remove the link element from the document and revoke the URL for the Blob object
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+    }
+
 
     reload_globals(0);
 
