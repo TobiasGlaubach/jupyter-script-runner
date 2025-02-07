@@ -375,8 +375,8 @@ class Script(SQLModel, table=True):
 - **Device ID:** [{self.device_id}]({base_url}/device/{self.device_id})
 - **Script-Parameters:** [{helpers.limit_len(self.script_params_json, 50)}]({base_url}/qry/script/{self.id}/params)
 - **Status:** {self.status}
-- **Time Started:** `{self.time_started}`
-- **Time Finished:** `{self.time_started}`
+- **Time Started:** `{helpers.make_zulustr(self.time_started)}`
+- **Time Finished:** `{helpers.make_zulustr(self.time_finished)}`
 - **Logs**: [python execution logs.txt]({base_url}/show/{dirName}/papermill_logs.txt)
 - **Script:** [{os.path.basename(self.script_out_path)}]({base_url}/show/{self.script_out_path})
 - **Result-Files:** [N={len(self.datafiles)} Datafiles]({base_url}/qry/script/{self.id}/datafiles)

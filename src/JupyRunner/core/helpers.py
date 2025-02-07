@@ -55,6 +55,9 @@ def limit_len(k, n_max =10, LR='L'):
     
 
 def make_zulustr(dtobj, remove_ms = True):
+    if isinstance(dtobj, str):
+        dtobj = parse_zulutime(dtobj)
+    
     utc = dtobj#.replace(tzinfo=datetime.timezone.utc)
     if remove_ms:
         utc = utc.replace(microsecond=0)
@@ -213,7 +216,7 @@ def can_write(path):
 
 def load_config(pth=None):
     if pth is None:
-        pth = 'config.yaml'
+        pth = 'config_private.yaml'
 
     log.info(f'Loading config from {pth=}')
     with open(pth, 'r') as fp:
