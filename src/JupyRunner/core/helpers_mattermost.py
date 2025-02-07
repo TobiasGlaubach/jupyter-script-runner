@@ -181,8 +181,8 @@ def handle_webhook_request(data, feedback_requests, _user_feedback_reply) -> dic
             id_ = type_id(args.pop(0))
             prop = args.pop(0)
             val = args.pop(0)
-            obj = dbi.set_property(type_cls, id, **{prop:val})
-            text = f':white_check_mark: SUCCESS: updated {clsname}[{id}].{prop} = {val} (with {type(val)=})\n new object below:'
+            obj = dbi.set_property(type_cls, id_, **{prop:val})
+            text = f':white_check_mark: SUCCESS: updated {clsname}[{id_}].{prop} = {val} (with {type(val)=})\n new object below:'
             
             text += '\n\n---\n\n' + obj.to_md()
             setattr(obj, prop, val)
