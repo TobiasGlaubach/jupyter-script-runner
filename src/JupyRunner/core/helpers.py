@@ -216,7 +216,7 @@ def can_write(path):
 
 def load_config(pth=None):
     if pth is None:
-        pth = 'config_private.yaml'
+        pth = 'config.yaml'
 
     log.info(f'Loading config from {pth=}')
     with open(pth, 'r') as fp:
