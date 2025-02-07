@@ -183,9 +183,8 @@ def handle_webhook_request(data, feedback_requests, _user_feedback_reply) -> dic
             val = args.pop(0)
             obj = dbi.set_property(type_cls, id_, **{prop:val})
             text = f':white_check_mark: SUCCESS: updated {clsname}[{id_}].{prop} = {val} (with {type(val)=})\n new object below:'
+            text += '\n\n---\n\n' + obj.to_md(url)
             
-            text += '\n\n---\n\n' + obj.to_md()
-            setattr(obj, prop, val)
         elif data.get('trigger_word') == '#help' or data.get('trigger_word') == '#h':
             text = ''' ## Webhook API for JupyRun: 
 
