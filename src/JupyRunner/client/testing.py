@@ -112,7 +112,7 @@ def get_summary(results, t_script_start, t_script_end, do_print = True):
     return lines, err_s
 
 
-def testcase(_func=None, *, test_name='', func_to_get_chan_values=None, expected_chan_values=None, n_repeat=1, doc=None, results_in = None):
+def testcase(_func=None, *, test_name='', func_to_get_chan_values=None, expected_chan_values=None, n_repeat=1, doc=None, results_in = None, user_info_cb=None):
 
     def decorator_name(func):
         @functools.wraps(func)
@@ -122,6 +122,15 @@ def testcase(_func=None, *, test_name='', func_to_get_chan_values=None, expected
             else:
                 global results
                 _results = results
+
+            def user_info(s, color=None):
+                try:
+                    if user_info_cb:
+                        if not color in 'black blue green red'.split():
+                            color = None                    
+                        return user_info_cb(s, color=color)
+                except Exception as err:
+                    pass
 
             for i in range(n_repeat):
                 print.log.clear()
@@ -137,6 +146,8 @@ def testcase(_func=None, *, test_name='', func_to_get_chan_values=None, expected
                 name = func.__name__ if not test_name else test_name
 
                 print_color((('-'*20) + ' RUNNING ' + fname).ljust(100, '-'), 'bold')
+                user_info((('-'*10) + ' RUNNING Testcase ' + fname).ljust(100, '-'), 'blue')
+
                 print_color(fname + 'running...', 'blue')
 
                 t_start = datetime.datetime.utcnow()
@@ -156,6 +167,7 @@ def testcase(_func=None, *, test_name='', func_to_get_chan_values=None, expected
                     
                 except Exception as err_obj:   
                     print_color(fname + '--> FAIL', 'red')
+                    user_info(fname + '--> FAIL', 'red')
                     s = 'ERROR while executing:\n' + traceback.format_exc()
                     print_color(s, 'red')
                     # ADD TO RESULTS
@@ -167,8 +179,10 @@ def testcase(_func=None, *, test_name='', func_to_get_chan_values=None, expected
                 
                 if err:
                     print_color(fname + '--> FAIL', 'red')
+                    user_info(fname + '--> FAIL', 'red')
                 else:
                     print_color(fname + '--> OK', 'green')
+                    user_info(fname + '--> OK', 'green')
 
                 time.sleep(0.1)
                 t_end = datetime.datetime.utcnow()
@@ -185,22 +199,32 @@ def testcase(_func=None, *, test_name='', func_to_get_chan_values=None, expected
                     if err_chans:
                         err += 'Error on channel(s): ' + ', '.join(err_chans) + '\n'
                         print_color(fname + '--> FAIL', 'red')
+                        user_info(fname + '--> FAIL', 'red')
                     else:
                         print_color(fname + '--> OK', 'green')
-
+                        user_info(fname + '--> OK', 'green')
                 
                 print_color((('-'*10) + ' DONE ' + ('-'*10)).ljust(100, '-'), 'header')
+                user_info((('-'*10) + ' DONE ' + ('-'*10)).ljust(100, '-'), 'blue')
+
                 if err:
                     s = fname + '--> FAILED!'
                     s += '\n' + err
 
                     print_color(s, 'red')
                     print_color('-'*100, 'red')
+
+                    user_info(s, 'red')
+                    user_info('-'*100, 'red')
+
                 else:
                     s = fname + '--> SUCCESS!'
                     print_color(s, 'green')
                     print_color('-'*100, 'green')
-
+                    
+                    user_info(s, 'green')
+                    user_info('-'*100, 'green')
+                    
                 print.do_log = False
                 txt = '\n'.join(print.log)
                     
@@ -216,7 +240,6 @@ def testcase(_func=None, *, test_name='', func_to_get_chan_values=None, expected
 
                 # ADD TO RESULTS
                 _results.append((name, err))
-                
 
         return wrapper
     

@@ -228,7 +228,7 @@
             content += ` <b>Device:</b>: <code>"${scriptInfo.device_id}"</code>`;
         }
         if (scriptInfo.script_id) {
-            content += ` <b>Script ID:</b>: <code>"${scriptInfo.script_id}"</code>`;
+            content += ` <a href="/pprint/script/${scriptInfo.script_id}" target="_blank"<b>Script ID:</b> <code>${scriptInfo.script_id}</code></a>`;
         }
         if (scriptInfo.script_uid && scriptInfo.script_uid != scriptInfo.id) {
             content += ` <b>Script Name:</b>: <code>"${scriptInfo.script_uid}"</code>`;
@@ -249,7 +249,7 @@
         
         card.className = "card";
         const s = doShow ? " show" : "";
-        
+
         card.innerHTML = `<div class="card-header" id="${cardUId}_heading">
       <h2 class="mb-0">
         <button class="btn btn-link btn-block text-left collapsed" type="button" data-toggle="collapse" data-target="#${cardUId}_content_div" aria-expanded="true" aria-controls="collapseOne">
@@ -281,7 +281,7 @@
         console.log(data, el);
         if (!el) {
             if(isNewest) {
-                var request_list = document.getElementById('request_list');
+                var requestList = document.getElementById('request_list');
                 const accordionItems = requestList.querySelectorAll('.accordion-item');
                 accordionItems.forEach(item => {
                     const collapseElement = item.querySelector('.collapse');
