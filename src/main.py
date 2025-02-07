@@ -3,6 +3,7 @@ import base64
 from contextlib import asynccontextmanager
 import datetime
 import hashlib
+import io
 import json
 import os
 from typing import Generator
@@ -44,6 +45,8 @@ template_dir = ''
 static_dir = ''
 
 config = helpers.load_config()
+
+jupyter_url = ':'.join(config['globals']['dbserver_uri'].split(':')[:-1]) + ':7991/lab?'
 
 modules = [dbi, filesys_storage_api, scriptrunner]
 serializers = {
@@ -132,14 +135,14 @@ def make_datafile_source_url(script:schema.Script, filename):
 @app.get("/ui")
 async def ui0(request: Request):
     template = templates.get_template(f'pg_home.html')
-    context = {"url_for": request.url_for}
+    context = {"url_for": request.url_for, "jupyter_url": jupyter_url}
     rendered_html = template.render(context)
     return HTMLResponse(status_code=200, content=rendered_html)
 
 @app.get("/ui/{page}")
 async def ui(page:str, request: Request):
     template = templates.get_template(f'pg_{page}.html')
-    context = {"url_for": request.url_for}
+    context = {"url_for": request.url_for, "jupyter_url": jupyter_url}
     rendered_html = template.render(context)
     return HTMLResponse(status_code=200, content=rendered_html)
 
@@ -720,6 +723,38 @@ async def ids_projectvariable(script_id:int):
         if not script:
             raise HTTPException(status_code=404, detail="script not found")
         return script.datafiles
+
+
+@app.get("/pprint/script")
+@app.get("/pprint/script/{script_id}")
+async def pprint_scripts(script_id:int|None=None, formt:str='html'):
+    url = config.get('globals', {}).get('dbserver_url')
+    print(f'{type(script_id)} {script_id=}')
+
+    if script_id is None:    
+        scripts = dbi.get_all(schema.Script)
+        md= '\n\n---\n\n'.join([script.to_md(base_url=url) for script in scripts])
+        doc = pyd.Doc()
+        doc.add_md(md)
+    else:
+        with dbi.se() as session:
+            script = session.get(schema.Script, script_id)
+            if not script:
+                raise HTTPException(status_code=404, detail="script not found")
+            md = script.to_md(base_url=url)
+            doc = pyd.Doc()
+            doc.add_md(md)
+
+    if formt.lower():
+        return HTMLResponse(status_code=200, content=doc.export(formt))
+    else:
+        s = doc.export(formt)
+        if isinstance(s, bytes):            
+            return FileResponse(io.BytesIO(s), media_type="application/octet-stream", filename="export_pprint." + frmt)
+        else:
+            return s
+        
+
 
 @app.get("/qry/script/{script_id}/docs")
 async def ids_projectvariable(script_id:int, html:int = Query(default=0, description='anything but 0 and this route will render the doc as HTML instead of returning the JSON representation')):
