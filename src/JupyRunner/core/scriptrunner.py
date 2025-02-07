@@ -62,14 +62,24 @@ def send_mattermost_status(script:Script, post_str='', emoji=None):
     send_mattermost(s, emoji = emoji)
     return s
 
-def send_userlog(msg, script, color='grey', doc = None):
+def send_userlog(msg, script, color='grey', doc = None, force_doc=None):
     try:
+        
+        user_info_verbosity = config.get('procserver', {}).get('user_info_verbosity', 0)
+
+        if user_info_verbosity == 0:
+            return    
+            
+        if not force_doc and user_info_verbosity == 1:
+            doc = None
+        
         if isinstance(doc, str):
             d = pyd.Doc()
             d.add_md(doc)
             doc = d
+        
         filename_without_extension = os.path.splitext(os.path.basename(script.script_out_path))[0]
-
+        
         api_log = capi.ServerApi(config.get('globals', {}).get('dbserver_uri'))
         api_log.user_info(f'Scriptrunner: {msg}', color=color, script_id=script.id, script_uid=filename_without_extension, device_id=script.device_id, doc=doc)
     except Exception as err:
@@ -203,6 +213,8 @@ def run_script(script_id:int):
     """
 
     try:
+        
+
         script = get(int(script_id))
 
         log.info(f"Script {script.id}: Starting")
@@ -324,7 +336,7 @@ def run_script(script_id:int):
             script.status = STATUS.UPLOADING
             script.script_out_path = script.script_out_path.replace(".ipynb", ".html")
             md = send_mattermost_status(script, emoji=':arrow_up: ')
-            send_userlog(f"Statusupdate...", script, doc=md)
+            #send_userlog(f"Statusupdate...", script, doc=md)
 
         script = commit(script)
 
@@ -337,12 +349,17 @@ def run_script(script_id:int):
         post = ':warning: :no_entry: **WITH ERRORS** :no_entry: :warning:' if err else ''
 
         md = send_mattermost_status(script, post_str=post)
-        send_userlog(f"Finished...", script, doc=md)
+        send_userlog(f"Script FAILED!  error={err}" if err else f"Script Finished...", script, doc=md)
 
         log.info(f'finished uploading {script.id=} {script.status=}')
         post = ' WITH ERRORS!!!\n' if script.errors else ''
         post += '\n\n' + '='*200
         pm_logger.info(f'SCRIPTRUNNER: finished with {script.id=} {script.status=}' + post)
+
+        md = script.to_md(url)
+        
+        send_userlog(f"DONE... here are your results:", script, doc=md, force_doc=True)
+
 
         return script
 
@@ -352,6 +369,6 @@ def run_script(script_id:int):
         script.append_error_msg(traceback.format_exc())  # Store traceback info
         commit(script)
         md = send_mattermost_failed(script, e)
-        send_userlog(f"Finished...", script, doc=md)
+        send_userlog(f"Server Error! error={e}", script, doc=md)
 
         return None  # Indicate error
