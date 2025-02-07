@@ -1796,6 +1796,7 @@ async def mattermost_webhook_post(request: Request):
             text = 'Not implemented yet!'
         elif data.get('trigger_word') == '#exp' or data.get('trigger_word') == '#script':
             args = data.get('text').split()   
+            args.pop(0)
             text = []
 
             for id_ in args:
@@ -1807,6 +1808,7 @@ async def mattermost_webhook_post(request: Request):
             text = '\n\n'.join(text)
         elif data.get('trigger_word') == '#device':
             args = data.get('text').split()   
+            args.pop(0)
             text = []
 
             for id_ in args:
@@ -1819,6 +1821,7 @@ async def mattermost_webhook_post(request: Request):
             text = '\n\n'.join(text)
         elif data.get('trigger_word') == '#result' or data.get('trigger_word') == '#datafile':
             args = data.get('text').split()   
+            args.pop(0)
             text = []
 
             for id_ in args:
