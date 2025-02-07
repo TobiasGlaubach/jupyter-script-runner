@@ -16,10 +16,11 @@
 
 <div style="margin-left: 10px; margin-right: 10px;">
     
-
-        <h5>Quick Add Script To Run Now With Default Params:</h5>
+    <div class="accordion">              
         <div class="input-group input-group-sm mb-1">
             <div class="input-group-prepend">
+                
+                <span class="input-group-text" style="min-width: 180px;">Quick Add Script To Run Now:</span>
                 <span class="input-group-text" style="min-width: 180px;"><b>script_in_path</b></span>
             </div>
             <select class="custom-select" id="intr-inp-newex-pthin">
@@ -33,7 +34,44 @@
             </select>
             <button class="btn btn-warning ml-2" type="button" id="intr-btn-newex-commit-provider" style="min-width: 80px;">COMMIT</button>
             <button class="btn btn-secondary ml-2" type="button" id="intr-btn-globals-reload" style="min-width: 80px;">RELOAD</button>
+            <button class="btn btn-info ml-2" data-toggle="collapse" data-target="#collapseOne" aria-expanded="false" aria-controls="collapseOne">
+                Show/Hide Params
+            </button>
         </div>
+    
+        <div id="collapseOne" class="collapse" aria-labelledby="headingOne" data-parent="#accordion">
+            <div class="col" id="intr-newex-container">
+                <div class="row" style="border-radius: 5px; border: 1px black solid; margin-left: 15px; margin: 10px; padding: 5px;">
+                    
+                    <!-- <input type="datetime-local"> -->
+                        
+                    <label for="intr-inp-get-exp-params"></label>
+                    <div class="input-group input-group-sm mb-1">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text" style="min-width: 180px;"><b>parameters_script_json</b></span>
+                        </div>
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">Enter below or get params from a previous script by script_id:</span>
+                        </div>
+                        <input type="number" class="form-control" placeholder="" id="intr-inp-get-exp-params" value="" min="0" step="1">
+                        <div class="input-group-prepend">
+                            <button class="btn btn-outline-secondary" type="button" id="intr-btn-getlast-exp-params" style="min-width: 80px;">GETLAST ID</button>
+                            <button class="btn btn-outline-secondary" type="button" id="intr-btn-get-exp-params" style="min-width: 80px;">GET PARAMS</button>
+                        </div>
+                    </div>
+
+                    <div class="input-group input-group-sm">
+                        <textarea class="form-control" id="intr-inp-newex-params" rows="15" placeholder="{experiment_ids: [171, 172]}" style="font-family: 'Courier New', Courier, monospace; font-size: smaller;"></textarea>
+                    </div>
+                    <button class="btn btn-dark btn-sm" type="button" id="intr-btn-test-json-params" onclick="testParamsJson()" style="min-width: 80px;">Test Valid JSON Format</button>
+
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+        
 
         <h3>User Live Feedback:</h3>
         <small>(for currently active user feedback) | <a href="/scriptlogs_qry">Click here to show the raw server data</a> | <a href="?dummy=1">Click here to show some dummy requests</a> | <span id="last_tick"></span> <span id="last_tick_ago"></span></small>
@@ -445,6 +483,11 @@
         button.disabled = true;
     }
 
+    async function getParams(script_in_path) {
+            return await queryAPI('/repo/get/params', {script_name:script_in_path});
+    }
+
+
     async function queryAPI(endpoint, kwargs) {
         var url = endpoint;
         if (kwargs) {
@@ -504,6 +547,95 @@
         }
     }
 
+    async function getParamsFromOtherEid(params_prev, sid_proto) {
+        // Remove leading and trailing whitespace from each line and join them
+        params_prev = params_prev.split('\n').map(s => s.trim()).join('');
+
+        // Remove trailing ",}" if present
+        if (params_prev.endsWith(',}')) {
+            params_prev = params_prev.slice(0, -2) + '}';
+        }
+
+        const p = params_prev ? params_prev : '{}';
+        // Parse JSON string into JavaScript object
+        const dc_params = JSON.parse(p);
+
+        // If eid_prototype is provided, fetch the prototype and merge parameters
+        if (sid_proto) {
+            exp = await queryAPI(`/script/${sid_proto}`);
+            console.log(exp);
+            const params_dc_proto = JSON.parse(exp['script_params_json']);
+            for (const k in dc_params) {
+                if (k in params_dc_proto) {
+                    dc_params[k] = params_dc_proto[k];
+                }
+            }
+            alert(`Success: merged results from ID=${sid_proto}`);
+        }
+        return dc_params;
+    }
+
+    function testParamsJson() {
+        try {
+            const sp = document.getElementById('intr-inp-newex-params').value;
+            if (sp) {
+                const params = JSON.parse(document.getElementById('intr-inp-newex-params').value);   
+                alert('SUCCESS: provided params are valid JSON');
+            } 
+            alert('FAIL --> Nothing in text field to test!');
+            
+        } catch (error) {
+            s = 'ERROR: The given input for "parameters_script_json" is not in valid json format!';
+            alert(s);
+        }
+    }
+
+    document.getElementById('intr-inp-newex-pthin').addEventListener('change', async () => {
+            try {
+                const script_in_path = document.getElementById('intr-inp-newex-pthin').value;
+                const params = await getParams(script_in_path);
+                document.getElementById('intr-inp-newex-params').value = JSON.stringify(params, null, 2);
+                console.log(`SUCCESS: updated params from "${script_in_path}"`)
+            } catch (error) {
+                let s = `ERROR while getting params!`;
+                alert(s);
+            }
+        });
+
+    document.getElementById('intr-btn-getlast-exp-params').addEventListener('click', async () => {
+            try {
+                const pth_in = document.getElementById('intr-inp-newex-pthin').value;
+                var p = pth_in.replace(/^.*[\\/]/, '')
+                const where_s = `script_in_path LIKE '%${p}%' ORDER BY start_condition DESC`;
+                const input_kwargs = {script_in_path:p, limit:1}
+                const results = await queryAPI('/qry/script', input_kwargs);
+                const result_element = results.length > 0 ? results[0] : null;
+                const ID = result_element != null ? result_element.id : '';
+                document.getElementById('intr-inp-get-exp-params').value = ID;
+                alert(`SUCCESS: Got parameters from last script ID="${ID}"`);
+            } catch (error) {
+                let s = `ERROR: while getting params from other experiment`;
+                alert(s);
+            }
+        });
+
+    document.getElementById('intr-btn-getlast-exp-params').addEventListener('click', async () => {
+        try {
+            const pth_in = document.getElementById('intr-inp-newex-pthin').value;
+            var p = pth_in.replace(/^.*[\\/]/, '')
+            const where_s = `script_in_path LIKE '%${p}%' ORDER BY start_condition DESC`;
+            const input_kwargs = {script_in_path:p, limit:1}
+            const results = await queryAPI('/qry/script', input_kwargs);
+            const result_element = results.length > 0 ? results[0] : null;
+            const ID = result_element != null ? result_element.id : '';
+            document.getElementById('intr-inp-get-exp-params').value = ID;
+            alert(`got parameters from last script ID="${ID}"`);
+        } catch (error) {
+            let s = `ERROR while getting params from other experiment`;
+            alert(s);
+        }
+    });
+
     document.getElementById('intr-btn-globals-reload').addEventListener('click', async () => {
             reload_globals(1);
         });
@@ -511,16 +643,22 @@
 
     async function upload() {
         try { 
+            const sp = document.getElementById('intr-inp-newex-params').value;
+
             const script_in_path = document.getElementById('intr-inp-newex-pthin').value;
             const device_id = document.getElementById('intr-inp-newex-device').value;
+            const params = JSON.parse(sp ? sp : '{}');  
 
             var kwargs = {'script_in_path': script_in_path}
 
             if (device_id) {
                 kwargs['device_id'] = device_id;
             }
-            
-            inp = `\n\nscript=${script_in_path}\n\ndevice_id=${device_id}`;
+            if (params) {
+                kwargs['script_params_json'] = params;
+            }
+
+            const inp = `\n\nscript=${script_in_path}\n\ndevice_id=${device_id}`;
 
             // Prepare the PATCH request
             fetch('/action/script/run', {
