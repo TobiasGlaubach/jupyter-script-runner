@@ -118,6 +118,8 @@ class Device(SQLModel, table=True):
 
     scripts: list["Script"] = Relationship(back_populates="device", sa_relationship_kwargs={"lazy": "selectin"})
     datafiles: list["Datafile"] = Relationship(back_populates="device", sa_relationship_kwargs={"lazy": "selectin"})
+    
+    
     def append_error_msg(self, err):
         self.errors += '\n' + str(err)
     
@@ -128,6 +130,38 @@ class Device(SQLModel, table=True):
     def get_link_md(self):
         return f'[{self.id}]({self.get_url_full()})'
     
+    
+    def to_md(self, base_url):
+        
+        if self.comments:
+            comments = f'### Comments:\n\n`{self.comments}`'
+        else:
+            comments = ''
+
+        if self.data_json:
+            data_json_str = f'### data_json:\n\n`{helpers.limit_len(self.data_json, 200, "R")}`'
+        else:
+            data_json_str = ''
+
+
+        markdown_string = f"""
+## Device: {self.id} Details
+
+- **ID:** [{self.id}]({base_url}/device/{self.id})
+- **Source**: [{self.source}]({self.source})
+- **Address**: [{self.address}]({self.address})
+- **Connection Protocol**: {self.connection_protocol}
+- **Configuration**: {self.configuration}
+- **Last Time Changed:** `{self.last_time_changed}`
+
+{comments}
+
+{data_json_str}
+        """.strip()
+
+        return markdown_string
+    
+
 def get_default_params():
     return {'follow_up_script' : {'script_in_path': '', 'script_params_json': {}}}
 
@@ -383,6 +417,49 @@ class Datafile(SQLModel, table=True):
     def append_error_msg(self, err):
         self.errors += '\n' + str(err)
 
+
+def to_md(self, base_url):
+    if self.comments:
+        comments = f'### Comments:\n\n`{self.comments}`'
+    else:
+        comments = ''
+
+    if self.data_json:
+        data_json_str = f'### data_json:\n\n`{helpers.limit_len(self.data_json, 200, "R")}`'
+    else:
+        data_json_str = ''
+
+    if self.locations_storage_json:
+        locations_storage_json_str = f'### locations_storage_json:\n\n`{helpers.limit_len(self.locations_storage_json, 200, "R")}`'
+    else:
+        locations_storage_json_str = ''
+
+
+    markdown_string = f"""
+## Datafile: {self.id} Details
+
+- **ID:** [{self.id}]({base_url}/datafile/{self.id})
+- **Script ID:** [{self.script_id}]({base_url}/script/{self.script_id})
+- **Device ID:** [{self.device_id}]({base_url}/device/{self.device_id})
+- **Filename:** {self.filename}
+- **Tags:** {', '.join(self.tags)}
+- **Measurement Name:** {self.meas_name}
+- **Status:** {self.status}
+- **Errors:** {self.errors}
+- **Data Type:** {self.data_type}
+- **MIME Type:** {self.mime_type}
+- **File Path:** {self.file_path}
+- **Time Initiated:** `{self.time_initiated}`
+- **Last Time Changed:** `{self.last_time_changed}`
+
+{comments}
+
+{data_json_str}
+
+{locations_storage_json_str}
+    """.strip()
+
+    return markdown_string
 
 class ProjectVariable(SQLModel, table=True):
     id: str = Field(primary_key=True, unique=True)
