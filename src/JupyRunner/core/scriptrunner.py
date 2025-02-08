@@ -10,7 +10,7 @@ import yaml
 
 import pydocmaker as pyd
 
-from JupyRunner.core import schema, api_interface, filesys_storage_api
+from JupyRunner.core import schema, api_interface, filesys_storage_api, helpers
 from JupyRunner.core.schema import Script, STATUS
 from JupyRunner.core.helpers import log, get_utcnow, make_zulustr, now_iso, logging, limit_len
 from JupyRunner.core.helpers_mattermost import send_mattermost, LOGGING_EMOJIES
@@ -80,7 +80,7 @@ def send_userlog(msg, script, color='grey', doc = None, force_doc=None):
         
         filename_without_extension = os.path.splitext(os.path.basename(script.script_out_path))[0]
         
-        api_log = capi.ServerApi(config.get('globals', {}).get('dbserver_uri'))
+        api_log = capi.ServerApi(helpers.get_db_url(config=config))
         api_log.user_info(f'Scriptrunner: {msg}', color=color, script_id=script.id, script_uid=filename_without_extension, device_id=script.device_id, doc=doc)
     except Exception as err:
         pass
@@ -94,7 +94,7 @@ def setup(cnfg):
     config = cnfg
 
     
-    url = config['globals']['dbserver_uri']
+    url = helpers.get_db_url(config=config)
     log.info(f'Scriptrunner initialized with {url=}')
     api = api_interface.ScriptClient(url)
     dfi_api = api_interface.DataFileClient(url)
@@ -345,7 +345,8 @@ def run_script(script_id:int):
         
         assert isinstance(res, dict) and res.get('success', False), f'trigger_upload for {script.id=} failed! {res=}'
 
-        script = set_prop_remote(script.id, status=STATUS.FINISHED)
+        
+        script = set_prop_remote(script.id, status=STATUS.FAILED if err else STATUS.FINISHED)
         post = ':warning: :no_entry: **WITH ERRORS** :no_entry: :warning:' if err else ''
 
         md = send_mattermost_status(script, post_str=post)

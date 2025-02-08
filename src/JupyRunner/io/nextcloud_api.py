@@ -4,6 +4,8 @@ import os, time, json
 import nextcloud_client
 import xmltodict
 from urllib import parse
+from cryptography.fernet import Fernet
+
 
 import os, inspect, sys
 current_dir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
@@ -20,21 +22,27 @@ up = None
 nc = None
 
 
-def get_nc_info(login_info_file):
-    from cryptography.fernet import Fernet
-
-    with open(login_info_file, 'r') as fp:
-        k, a, b = fp.readlines()
+def get_nc_info(s):
+    if s:
+        k, a, b = s.split()
         FERNET = Fernet(bytes(k, 'ASCII'))
         a = FERNET.decrypt(a).decode()
         b = FERNET.decrypt(b).decode()
-    return (a,b)
+        return (a,b)
+    else:
+        return ('', '')
+    
 
 def setup(config):
     pass
 
 def start(config):
-    return NextcloudAccessor(config)
+    try:
+        return NextcloudAccessor(config)    
+    except AssertionError as err:
+        log.error(err)
+        return None
+    
 
 
 def _get_fileid_for_path(s, baseurl, url):
@@ -67,28 +75,23 @@ def _get_fileid_for_path(s, baseurl, url):
 class NextcloudAccessor(object):
     def __init__(self, config) -> None:
         self.config = config
-
-        
-        assert self.mycnfg, 'no login info given for nextcloud!'
-
+        assert os.environ.get('NC_URL'), 'no nextcloud server URL defined!'
         global up, nc
         if up is None:
-            up = get_nc_info(self.mycnfg['login'])
+            # gets the API authentification from an environmental variable with the name LOGIN_INFO_NC
+            up = get_nc_info(os.environ.get('NC_LOGIN_INFO', '').strip())
 
         if nc is None:
-            nc = nextcloud_client.Client(self.mycnfg['url'])
+            nc = nextcloud_client.Client(os.environ.get('NC_URL'))
             nc.login(*up)
         
         self.up = up
         self.nc = nc
 
-    @property
-    def mycnfg(self):
-        return self.config.get('storage_locations', {}).get('nextcloud')
-    
+
     @property
     def default_dir(self):
-        return self.mycnfg.get('kwargs', {}).get('default_dir', '')
+        return os.environ.get('NC_DEFAULT_DIR', '/jupyrunner/data')
     
     @property
     def baseurl(self):

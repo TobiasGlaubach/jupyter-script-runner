@@ -16,11 +16,13 @@ from JupyRunner.core import helpers
 
 url = None
 dbserver_uri = None
+incoming_token = None
 
 def setup(config):
-    global url, dbserver_uri
-    url = config['globals']['mattermost_uri']
-    dbserver_uri = config['globals']['dbserver_uri']
+    global url, incoming_token, dbserver_uri
+    url = os.environ.get('MATTERMOST_URL', '')
+    incoming_token = os.environ.get('MATTERMOST_INCOMING', '')
+    dbserver_uri = helpers.get_db_url(with_port=True, with_http=True, config=config)
 
 def start(config):
     pass

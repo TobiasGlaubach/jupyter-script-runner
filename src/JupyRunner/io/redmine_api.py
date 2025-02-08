@@ -5,12 +5,6 @@ from JupyRunner.core import filesys_storage_api, schema, helpers
 
 log = helpers.log
 
-def _get_rm_info(pth):
-    with open(pth, 'r') as fp:
-        key = fp.read().strip()
-    return key
-
-
 
 server = ''
 token = ''
@@ -20,13 +14,12 @@ redmine = None
 def setup(config):
     global token, server, redmine
     try:
-        
+        assert os.environ.get('RM_URL'), 'no redmine server URL defined!'
         import redminelib
         config = config.get('storage_locations', config)
-        rm = config.get('redmine', config)
-
-        api_key = _get_rm_info(rm.get('login'))
-        url = rm.get('url')
+        # gets the API key from an environmental variable with the name LOGIN_INFO_RM
+        api_key = os.environ.get('RM_LOGIN_INFO', '').strip()
+        url = os.environ.get('RM_URL', '')
         redmine = redminelib.Redmine(url, key=api_key)
         
         log.info('Sucessfully connected to redmine')
@@ -35,8 +28,13 @@ def setup(config):
 
 
 def start(config):
-    return RedmineAccessor(config)
 
+    try:
+        return RedmineAccessor(config)    
+    except AssertionError as err:
+        log.error(err)
+        return None
+    
 class RedmineAccessor(object):
     def __init__(self, config) -> None:
         self.config = config

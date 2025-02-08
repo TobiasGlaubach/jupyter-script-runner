@@ -61,7 +61,7 @@ def setup(config):
     
     sqlite_url = f"sqlite:///{sqlite_file_name}"
     connect_args = {"check_same_thread": False}
-    engine = create_engine(sqlite_url, echo=True, connect_args=connect_args, json_serializer=json_serializer, json_deserializer=json_deserializer)
+    engine = create_engine(sqlite_url, echo=False, connect_args=connect_args, json_serializer=json_serializer, json_deserializer=json_deserializer)
 
 def start(config):
     helpers.log.info(f"creating all tables for {sqlite_file_name=}")

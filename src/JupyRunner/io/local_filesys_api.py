@@ -12,7 +12,12 @@ def setup(config):
     pass
 
 def start(config):
-    return LocalFile(config)
+    try:
+        return LocalFile(config)    
+    except AssertionError as err:
+        log.error(err)
+        return None
+    
 
 class LocalFile(object):
     def __init__(self, config) -> None:

@@ -20,22 +20,23 @@ if __name__ == '__main__':
     parent_dir = os.path.dirname(os.path.dirname(current_dir))
     sys.path.insert(0, parent_dir)
 
-from JupyRunner.core import schema, filesys_storage_api
+from JupyRunner.core import schema, filesys_storage_api, redis_interface, helpers
 from JupyRunner.core import scriptrunner as runner
 
 from JupyRunner.client import api_accessor as capi
 
-from JupyRunner.core.helpers import get_utcnow, make_zulustr, parse_zulutime, log, set_loglevel, get_primary_ip, load_config
+from JupyRunner.core.helpers import get_utcnow, make_zulustr, parse_zulutime, log, set_loglevel, get_primary_ip, load_config, get_db_url
 from JupyRunner.core.helpers_mattermost import send_mattermost, LOGGING_EMOJIES
 
 my_runner_id = os.environ.get('RUNNER_ID', None)
 
-config =  None
+config = load_config()
+
 run_directly = None
 
 processes = {}
 
-config = load_config()
+
 
 modules = [runner, filesys_storage_api]
 for module in modules:
@@ -48,7 +49,9 @@ for module in modules:
 
 
 api = runner.api
-api_log = capi.ServerApi(config.get('globals', {}).get('dbserver_uri'))
+
+dbserver_uri = get_db_url(config=config)
+api_log = capi.ServerApi(dbserver_uri)
 
 run_directly = config.get('procserver', {}).get('do_direct_running', 0)
 user_info_verbosity = config.get('procserver', {}).get('user_info_verbosity', 0)
@@ -61,6 +64,18 @@ def get_script(script_id:int) -> schema.Script:
         script_id = int(script_id)
     return api.get(script_id)
 
+
+
+rapi = redis_interface.RedisApi()
+pubsub_run = rapi.subscribe_script_start()
+pubsub_cancle = rapi.subscribe_script_cancle()
+pubsub_prepare = rapi.subscribe_script_prepare()
+timeout_redis = config.get('procserver', {}).get('timeout_redis', 0.1)
+
+def get_scripts_redis(pubsub):
+    script_ids = rapi.get_messages(pubsub, timeout_redis)
+    scripts = [get_script(sid) for sid in script_ids]
+    return [x for x in scripts if not x is None]
 
 def test_shall_I_run_this_script(script, by_ip=False):
 
@@ -105,23 +120,23 @@ def test_is_running(key):
 def test_is_started(key):
     return key in processes
 
-def finish(p, id):
-    log.info(f'{id} DONE. returncode:{p.returncode}')
+def finish(p, sid):
+    log.info(f'{sid} DONE. returncode:{p.returncode}')
     retcode = p.poll()
     out, err = p.communicate()
     
     out = out.decode(sys.stdout.encoding)
     err = err.decode(sys.stderr.encoding)
 
-    obj = get_script(id)
+    obj = get_script(sid)
     if retcode:
         obj.append_error_msg(err)
         log.error('ERROR: ' + err)
         log.debug('setting status: FAILED...' )
-        obj = set_prop_remote(id, status = schema.STATUS.FAILED, errors = obj.errors)
+        obj = set_prop_remote(sid, status = schema.STATUS.FAILED, errors = obj.errors)
 
         s = ''
-        s += f'\nFAILED on processing for script {id}'
+        s += f'\nFAILED on processing for script {sid}'
         s += f'\nError Message: ```{str(err)}```'
         s += f'\nSTATUS NEW: **FAILED**'
         send_mattermost(s, emoji=LOGGING_EMOJIES.FAIL)
@@ -130,7 +145,7 @@ def finish(p, id):
 
         try:
             if user_info_verbosity > 0: 
-                api_log.user_info('Procserver: ' + s, color='red', script_id=id, script_uid=filename_without_extension, device_id=obj.device_id)
+                api_log.user_info('Procserver: ' + s, color='red', script_id=sid, script_uid=filename_without_extension, device_id=obj.device_id)
             
         except Exception as err:
             pass
@@ -139,20 +154,20 @@ def finish(p, id):
     else:
         try:
             if user_info_verbosity > 0:
-                api_log.user_info('Procserver: FINISHED', color='grey', script_id=id, script_uid=filename_without_extension, device_id=obj.device_id)
+                api_log.user_info('Procserver: FINISHED', color='grey', script_id=sid, script_uid=filename_without_extension, device_id=obj.device_id)
         except Exception as err:
             pass
 
-    return id
+    return sid
 
 
-def start_job(id):
+def start_job(sid):
 
-    assert id not in processes, f'cannot start job {id=} since it is still running!'
-    assert id, 'need to give an id!'
+    assert not sid in processes, f'cannot start job {sid=} since it is still running!'
+    assert sid, 'need to give an id!'
     run_script_path = config['procserver']['run_script_path']
     
-    cmds = [run_script_path, '--id', str(id)]
+    cmds = [run_script_path, '--id', str(sid)]
     if os.name == 'nt':
         cmds = [config['procserver']['pythonpath_for_win']] + cmds
     else:
@@ -165,13 +180,13 @@ def start_job(id):
     else:
         p = subprocess.Popen(cmds, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         
-    processes[id] = p
+    processes[sid] = p
 
-def cancle_job(id):
-    if not test_is_running(id):
+def cancle_job(sid):
+    if not test_is_running(sid):
         return 404, {'ERROR': 'no such job found within running jobs'}
     else:
-        p = processes[id]
+        p = processes[sid]
         p.terminate()
         p.wait(timeout=config['procserver']['terminate_timeout_sec'])
         p.kill()
@@ -179,20 +194,24 @@ def cancle_job(id):
         out = out.decode(sys.stdout.encoding)
         err = err.decode(sys.stderr.encoding)
         
-        obj = get_script(id)
+        obj = get_script(sid)
         obj.append_error_msg(err)
         obj = set_prop_remote(obj, status = schema.STATUS.CANCELLED, errors = obj.errors)
         
-        del processes[id]
+        del processes[sid]
 
 
 
-def tick_awaiting_check():
+def tick_awaiting_check(do_qry):
     # initial checks
     log.debug(f'tick_awaiting_check...')
 
-    stati = [schema.STATUS.INITIALIZING, schema.STATUS.AWAITING_CHECK]
-    scripts = api.qry(stati=stati)
+    scripts = get_scripts_redis(pubsub_prepare)
+
+    if do_qry:
+        stati = [schema.STATUS.INITIALIZING, schema.STATUS.AWAITING_CHECK]
+        scripts += api.qry(stati=stati)
+
     log.debug(f'got N={len(scripts)} scripts which need attention...')
 
     for script in scripts:
@@ -220,13 +239,26 @@ def tick_awaiting_check():
         log.info(f'DONE CHECKING with {script.id} --> {stat}')
 
         script = commit(script)
-        
+        # if sufficiently close start time
+        if script.start_condition <= (get_utcnow() + datetime.timedelta(seconds=2)):
+            # start direct
+            rapi.trigger_script_start(script.id)
+        else:
+            # schedule for later
+            rapi.schedule_script(script.id, script.start_condition)
 
-def tick_cancelling():
+
+def tick_cancelling(do_qry):
     log.debug(f'tick_cancelling...')
-    # initial checks
-    stati = [schema.STATUS.CANCELLING]
-    scripts = api.qry(stati=stati)
+    
+
+    scripts = get_scripts_redis(pubsub_cancle)
+
+    if do_qry:
+        # initial checks
+        stati = [schema.STATUS.CANCELLING]
+        scripts += api.qry(stati=stati)
+
     log.debug(f'got N={len(scripts)} scripts which need attention...')
 
     for script in scripts:
@@ -301,11 +333,16 @@ def tick_cleanup():
         log.debug('removed: ' + str(removed) )
         
 
-def tick_start():
+def tick_start(do_qry):
+
     log.debug(f'tick_start...')
-    stati = [schema.STATUS.STARTING, schema.STATUS.WAITING_TO_RUN]
-    stat = None
-    scripts = api.qry(stati=stati)
+
+    scripts = get_scripts_redis(pubsub_run)
+    
+    if do_qry:
+        stati = [schema.STATUS.STARTING, schema.STATUS.WAITING_TO_RUN]
+        scripts += api.qry(stati=stati)
+
     log.debug(f'got N={len(scripts)} scripts which need attention...')
     for script in scripts:
         try:
@@ -350,13 +387,13 @@ def tick_start():
 
     
 
-def tick():
+def tick(do_qry=False):
     log.debug(f'tick... ')
-    tick_awaiting_check()
-    tick_cancelling()
+    tick_awaiting_check(do_qry)
+    tick_cancelling(do_qry)
     tick_cleanup()
     tick_housekeeping()
-    tick_start()
+    tick_start(do_qry)
     log.debug(f'tick... DONE')
 
 def startup_testrun():
@@ -368,7 +405,7 @@ def startup_testrun():
     p = '/home/jovyan/99_startup_testscript.ipynb'
     assert os.path.exists(p), 'startup testscript is missing! >> '  + p
     new_path = filesys_storage_api.default_dir_repo + '/' + os.path.basename(p)
-    shutil.move(p, new_path)
+    shutil.copy(p, new_path)
 
     startup_script = runner.api.post({'script_in_path': new_path, 'device_id': 'dummy_device'})
     assert startup_script, 'error starting a testscript!'
@@ -387,8 +424,13 @@ def startup_info():
         'ip': get_primary_ip(),
     }
 
+    
     if procserver_info is None:
         procserver_info = schema.ProjectVariable(id=id, data_json={})
+    if isinstance(procserver_info.time_initiated, str):
+        procserver_info.time_initiated = parse_zulutime(procserver_info.time_initiated)
+    if isinstance(procserver_info.last_time_changed, str):
+        procserver_info.last_time_changed = parse_zulutime(procserver_info.last_time_changed)
 
     procserver_info.data_json = data
     runner.var_api.put(procserver_info)
@@ -411,11 +453,13 @@ def update_ticker(t_sleep):
 
 def run():
     log.info('procserver starting up!')
-    t_sleep = config.get('procserver', {}).get('t_interval', 60)
-    
+    t_interval = config.get('procserver', {}).get('t_interval', 60)
+    t_sleep = config.get('procserver', {}).get('t_sleep', 1)
+    t_info = config.get('procserver', {}).get('t_info', 60*60)
+
     i = 0
-    log.info(f'procserver waiting {t_sleep/2} sec before starting...')
-    time.sleep(t_sleep/2) # to have the DB up and running
+    log.info(f'procserver waiting {t_interval/4} sec before starting...')
+    time.sleep(t_interval/4) # to have the DB up and running
     log.info(f'pinging server at "{api.base_url}"...')
 
     assert runner.api_interface.ping(), f'pinging {runner.api_interface.url=} failed!'
@@ -424,39 +468,51 @@ def run():
     startup_info()
     
     startup_testrun()
+    tlast_info = -1
+    tlast_query = -1
+
 
     while(1):
+
         try:
-            if i % 100 == 0:
+            now = time.time()
+            if (now - tlast_info) > t_info:
+                tlast_info = now
                 log.info('procserver is still alive!')
                 update_ticker(t_sleep)
 
-            tick()
+            if (now - tlast_query) > t_sleep:
+                tlast_query = now
+                do_qry = True
+            else:
+                do_qry = False
+
+            tick(do_qry)
             i += 1
 
         except Exception as err:
             log.error(err)
             traceback.print_exception(err)
 
-            
-
         time.sleep(t_sleep)
 
 if __name__ == '__main__':
     log.info('STARTING procserver!')
 
-    
-
-    if len(sys.argv) >1 and 'debug' in sys.argv[-1].lower():
-
+    if (len(sys.argv) >1 and 'debug' in sys.argv[-1].lower()):
         log.setLevel('DEBUG')
+
         dc = {
             # "script_in_path": r"C:\Users\tglaubach\repos\jupyter-script-runner\src\scripts\00_example_script.ipynb".replace('\\', '/'),
-            "script_in_path": r"C:\Users\tglaubach\repos\jupyter-script-runner\src\scripts\02_example_functional_test.ipynb".replace('\\', '/'),
+            #"script_in_path": r"C:\Users\tglaubach\repos\jupyter-script-runner\src\scripts\02_example_functional_test.ipynb".replace('\\', '/'),
+            "script_in_path": r"home/jovyan/shared/repos/99_startup_testscript.ipynb",
             "script_params_json": { "do_upload": 1 }
             # ... other script attributes
         }
+        print('post!')
+
         api.post(dc)
+        print('post-done...')
         tick()
 
     elif len(sys.argv) > 1:

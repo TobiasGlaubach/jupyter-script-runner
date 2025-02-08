@@ -17,6 +17,7 @@ import nbconvert
 import pydocmaker as pyd
 import urllib.parse
 import asyncio
+import warnings
 
 from fastapi import FastAPI, Form, HTTPException, Path, Query, Request, Response, UploadFile, File, Response, Depends
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
@@ -31,12 +32,13 @@ from jinja2 import Environment, FileSystemLoader
 from JupyRunner.core import db_interface as dbi
 from JupyRunner.core import helpers_userfeedback as usr
 
-from JupyRunner.core import schema, helpers, filesys_storage_api, helpers_mattermost, helpers_papermill, scriptrunner
+from JupyRunner.core import schema, helpers, filesys_storage_api, helpers_mattermost, helpers_papermill, scriptrunner, redis_interface
 from JupyRunner.io import nextcloud_api, redmine_api, local_filesys_api
 import JupyRunner
 
 
-
+# Ignore UserWarning warnings from Pydantic
+warnings.filterwarnings('ignore', category=UserWarning, module='pydantic')
 
 log = helpers.log
 
@@ -46,7 +48,9 @@ static_dir = ''
 
 config = helpers.load_config()
 
-jupyter_url = ':'.join(config['globals']['dbserver_uri'].split(':')[:-1]) + ':7991/lab?'
+dbserver_uri = helpers.get_db_url(config=config)
+jupyter_url = helpers.get_jupyter_url(config=config) 
+
 
 modules = [dbi, filesys_storage_api, scriptrunner]
 serializers = {
@@ -67,7 +71,14 @@ for module in modules:
 redmine_api.setup(config['wiki_uploader'])
 
 
+rapi = redis_interface.RedisApi()
+
 serializers = {k:v.start(config) for k, v in serializers.items() if k in config.get('storage_locations')}
+
+
+helpers.logging.getLogger('sqlalchemy.engine').setLevel(helpers.logging.WARNING)
+helpers.logging.getLogger('sqlalchemy.orm').setLevel(helpers.logging.WARNING)
+
 
 log.info('STARTED!')
 
@@ -309,6 +320,11 @@ def create_script(script: schema.Script) -> schema.Script:
     log.debug('POST /script')
     assert script.id is None or script.id < 1725603466, f'{script.id=} are you trying to commit a timestamp to an id?'
     res = dbi.commit(script)
+    if res.status in [schema.STATUS.AWAITING_CHECK, schema.STATUS.INITIALIZING]:
+        rapi.trigger_script_prepare(res.id)
+    elif res.status in [schema.STATUS.WAITING_TO_RUN, schema.STATUS.STARTING, schema.STATUS.RUNNING]:
+        rapi.schedule_script(res.id, res.start_condition)
+
     log.debug(f'POST /script -> {res=}')
     return res
 
@@ -728,12 +744,11 @@ async def ids_projectvariable(script_id:int):
 @app.get("/pprint/script")
 @app.get("/pprint/script/{script_id}")
 async def pprint_scripts(script_id:int|None=None, formt:str='html'):
-    url = config.get('globals', {}).get('dbserver_uri')
-    print(f'{type(script_id)} {script_id=} {url=}')
+    print(f'{type(script_id)} {script_id=} {dbserver_uri=}')
 
     if script_id is None:    
         scripts = dbi.get_all(schema.Script)
-        md= '\n\n---\n\n'.join([script.to_md(base_url=url) for script in scripts])
+        md= '\n\n---\n\n'.join([script.to_md(base_url=dbserver_uri) for script in scripts])
         doc = pyd.Doc()
         doc.add_md(md)
     else:
@@ -741,7 +756,7 @@ async def pprint_scripts(script_id:int|None=None, formt:str='html'):
             script = session.get(schema.Script, script_id)
             if not script:
                 raise HTTPException(status_code=404, detail="script not found")
-            md = script.to_md(base_url=url)
+            md = script.to_md(base_url=dbserver_uri)
             doc = pyd.Doc()
             doc.add_md(md)
 
@@ -758,12 +773,9 @@ async def pprint_scripts(script_id:int|None=None, formt:str='html'):
 @app.get("/pprint/device")
 @app.get("/pprint/device/{device_id}")
 async def pprint_scripts(device_id:int|None=None, formt:str='html'):
-    url = config.get('globals', {}).get('dbserver_uri')
-    print(f'{type(device_id)} {device_id=}')
-
     if device_id is None:    
         scripts = dbi.get_all(schema.Device)
-        md= '\n\n---\n\n'.join([script.to_md(base_url=url) for script in scripts])
+        md= '\n\n---\n\n'.join([script.to_md(base_url=dbserver_uri) for script in scripts])
         doc = pyd.Doc()
         doc.add_md(md)
     else:
@@ -771,7 +783,7 @@ async def pprint_scripts(device_id:int|None=None, formt:str='html'):
             script = session.get(schema.Device, device_id)
             if not script:
                 raise HTTPException(status_code=404, detail="script not found")
-            md = script.to_md(base_url=url)
+            md = script.to_md(base_url=dbserver_uri)
             doc = pyd.Doc()
             doc.add_md(md)
 
@@ -789,12 +801,10 @@ async def pprint_scripts(device_id:int|None=None, formt:str='html'):
 @app.get("/pprint/datafile")
 @app.get("/pprint/datafile/{datafile_id}")
 async def pprint_scripts(datafile_id:int|None=None, formt:str='html'):
-    url = config.get('globals', {}).get('dbserver_uri')
-    print(f'{type(datafile_id)} {datafile_id=}')
 
     if datafile_id is None:    
         o = dbi.get_all(schema.Datafile)
-        md= '\n\n---\n\n'.join([script.to_md(base_url=url) for script in o])
+        md= '\n\n---\n\n'.join([script.to_md(base_url=dbserver_uri) for script in o])
         doc = pyd.Doc()
         doc.add_md(md)
     else:
@@ -802,7 +812,7 @@ async def pprint_scripts(datafile_id:int|None=None, formt:str='html'):
             o = session.get(schema.Datafile, datafile_id)
             if not o:
                 raise HTTPException(status_code=404, detail="script not found")
-            md = o.to_md(base_url=url)
+            md = o.to_md(base_url=dbserver_uri)
             doc = pyd.Doc()
             doc.add_md(md)
 
@@ -953,6 +963,9 @@ def action_trigger_upload(script_id:int, is_dryrun:int=Query(default=0, descript
                 for key, ser in serializers.items():
                     if key == 'local':
                         continue
+                    if ser is None:
+                        log.info(f'Skipping upload to {key=} because the serialier is None (which usually indicates an error)...')
+
                     remote_path = ser.mk_full_path(p).replace('\\', '/')
 
                     uploaded = False
@@ -1141,6 +1154,8 @@ def _action_script(kwargs, test_only=False):
 
         if not test_only:    
             res = dbi.commit(schema.Script(**kwargs))
+            rapi.trigger_script_prepare(res.id)
+
     except Exception as err:
         success = False
         errormsg = f'ERROR: {type(err)=} | {err=}'
@@ -1171,6 +1186,8 @@ def action_script_rerun(script_id:int):
             obj.status = schema.STATUS.AWAITING_CHECK
             obj.errors = ''
             obj.time_started = ''
+        
+        rapi.trigger_script_prepare(script_id)
 
         return dict(command='rerun', id=script_id, success=True, status=obj.status, comments=obj.comments, obj_new = obj, obj_old=obj_old)
     
@@ -1393,9 +1410,7 @@ def handle_new_doc(doc:pyd.DocBuilder, doc_name, dir_rep, page_title, force_over
     dc_local = doc.export_all(dir_path=dir_rep, report_name=doc_name)
     
     localpath = next((k for k in dc_local if k.endswith('html')), None)
-    
-    baseurl = config.get('globals').get('dbserver_uri')
-    local_url = f'{baseurl}/show/{urllib.parse.quote(localpath)}'
+    local_url = f'{dbserver_uri}/show/{urllib.parse.quote(localpath)}'
 
     rmconfig = config.get('wiki_uploader', {}).get('redmine', {})
     project_id = rmconfig.get('project_id')
@@ -1740,8 +1755,11 @@ async def mattermost_webhook_post(request: Request):
     
     global feedback_requests, feedback_answers
 
+    tkn = helpers_mattermost.incoming_token
+    if not tkn:
+        log.warning('Incoming webhooks are not enabled on this server.')
+        return JSONResponse(status_code=503, content={"message": "Service Unavailable"})
 
-    tkn = config['globals'].get('mattermost_incoming')
     data = await request.json()
     if tkn and data.get('token') != tkn:
         client_host = request.client.host

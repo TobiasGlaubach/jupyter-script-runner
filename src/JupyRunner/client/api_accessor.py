@@ -150,6 +150,8 @@ class ServerApi(object):
         else:
             self.script_uid = None
 
+    def set_prop_remote(self, **kwargs):
+        return self.api.patch(f'script/{self.script_id}', **kwargs)
 
     def set_script_uid_from_outfile(self, script_out_path):
         self.script_uid = os.path.splitext(os.path.basename(script_out_path))[0]

@@ -28,7 +28,7 @@ def get_loglevel(config):
     return config.get('globals', {}).get('loglevel', os.environ.get('loglevel', log_level))
 
 def set_loglevel(config):
-    lvl = get_loglevel(config)
+    lvl = config if isinstance(config, str) else get_loglevel(config)
     log.setLevel(lvl)
     return lvl
 
@@ -216,7 +216,7 @@ def can_write(path):
 
 def load_config(pth=None):
     if pth is None:
-        pth = 'config.yaml'
+        pth = os.environ.get("CONFIG_PATH", 'config.yaml')
 
     log.info(f'Loading config from {pth=}')
     with open(pth, 'r') as fp:
@@ -225,6 +225,50 @@ def load_config(pth=None):
     set_loglevel(config)
     return config
 
+def is_valid_url(url):
+    # Check if the URL starts with http
+    if not url.startswith('http'):
+        return False
+
+    # Check if the URL has a port defined
+    match = re.search(r':\d+', url)
+    if match is None:
+        return False
+
+    return True
+
+def get_db_url(with_port = True, with_http=True, use_cache=True, config = None):
+    
+    if config is None:
+        config = load_config()
+
+    url = os.environ.get('DBSERVER_URL', config.get('globals', {}).get('dbserver_uri', ''))
+    port = str(config.get('globals', {}).get('default_port_db', '7990'))
+
+    if url and is_valid_url(url):
+        return url 
+    
+    if url:
+        url = ':'.join(url.split(':')[:-1])
+    else:
+        url = get_primary_ip(use_cache=use_cache)
+
+    if with_http:
+        if not '://' in url:
+            url = 'http://' + url
+    else:
+        url = url.split('://')[-1]
+
+    if with_port:
+        url = f'{url}:{port}'
+    
+    return url
+
+def get_jupyter_url(use_cache=True, config = None):
+    url = get_db_url(with_port=False, with_http=True, use_cache=use_cache, config=config)
+    port = str(config.get('globals', {}).get('default_port_jupyter', '7991'))
+    url = f'{url}:{port}/lab?'
+    return url
 
 if __name__ == '__main__':
     print(get_primary_ip())

@@ -2,3 +2,9 @@
 __pycache__*
 
 *-checkpoint.ipynb
+
+scripts/libs*
+src/scripts/libs*
+src/scripts/loose_docs*
+src/config_private.yaml
+.env

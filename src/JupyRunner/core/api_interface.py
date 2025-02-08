@@ -4,7 +4,6 @@ import enum
 from typing import Any, Dict
 import requests
 
-from sqlmodel import Session, create_engine, SQLModel, select
 from JupyRunner.core import schema, helpers
 
 
@@ -17,7 +16,8 @@ client = None
 def setup(cnfg):
     global config, url, client
     config = cnfg
-    url = config['globals']['dbserver_uri']
+    
+    url = helpers.get_db_url(with_port=True, with_http=True, config=config)
     log.info(f'HTTP API initialized with {url=}')
     client = APIClient(url)    
 

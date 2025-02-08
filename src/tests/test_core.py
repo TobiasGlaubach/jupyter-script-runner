@@ -1,7 +1,7 @@
 import time
 import pytest
 
-from sqlmodel import Session, create_engine, SQLModel, select
+from sqlmodel import Session, SQLModel
 
 import os, inspect, sys
 current_dir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))

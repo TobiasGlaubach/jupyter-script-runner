@@ -1,26 +1,24 @@
 version: '2.0'
 
+
 services:
   jupyrun_db:
     image: jupyrun_db:latest 
-
+    env_file: .env  # Docker Compose will read .env on the host
     restart: unless-stopped
-
-    environment:
-      DUMMY: 1
-
     build:
       context: .
       dockerfile: deploy/main/Dockerfile
-
+    
     volumes:
-      # - "C:/Users/tglaubach/Nextcloud/davmount/skampieng_db/jupyrun_db:/home/jovyan/db:rw"
-      # - "C:/Users/tglaubach/Nextcloud/davmount/skampieng_db/jupyrun_shared:/home/jovyan/shared:rw"
-      - /var/jupyrun/db:/home/jovyan/db:rw
-      - /var/jupyrun/shared:/home/jovyan/shared:rw
-
+      - ${DATA_BASE_PATH}/db:/home/jovyan/db:rw"
+      - ${DATA_BASE_PATH}/shared:/home/jovyan/shared:rw"
     ports:
       - "7990:8080"
+    depends_on:
+      - redis
+    networks:
+      - mynetwork
 
     command: fastapi run main.py --port 8080
     
@@ -30,32 +28,46 @@ services:
       context: .
       dockerfile: deploy/procserver/Dockerfile
     image: "jupyrun_proc:latest"
+    env_file: .env  # Docker Compose will read .env on the host
     volumes:
-      - /var/jupyrun/db:/home/jovyan/db:rw
-      - /var/jupyrun/shared:/home/jovyan/shared:rw
-
-      # - "C:/Users/tglaubach/Nextcloud/davmount/skampieng_db/jupyrun_db:/home/jovyan/db:rw"
-      # - "C:/Users/tglaubach/Nextcloud/davmount/skampieng_db/jupyrun_shared:/home/jovyan/shared:rw"
-
+      - ${DATA_BASE_PATH}/shared:/home/jovyan/shared:rw"
+    depends_on:
+      - redis
+      - jupyrun_db
+    networks:
+      - mynetwork
     environment:
       HOME: /home/jovyan
       JUPYTER_TOKEN: "jupyrun"
       SHARED: /home/jovyan/shared
       PYTHONPATH: "/home/jovyan/shared/libs"
     command: "python3 procserver.py"
-    depends_on:
-      - jupyrun_db
-  
+
 
   jupyter:
     depends_on:
         - jupyrun_proc
     image: jupyrun_proc:latest
-    ports: 
+    env_file: .env  # Docker Compose will read .env on the host
+    ports:
       - "7991:8888"
     volumes:
-      - /var/jupyrun/shared:/home/jovyan/shared:rw
+      - ${DATA_BASE_PATH}/db:/home/jovyan/db:rw"
+      - ${DATA_BASE_PATH}/shared:/home/jovyan/shared:rw"
     environment:
       JUPYTER_ENABLE_LAB: "yes"
       JUPYTER_TOKEN: "jupyrun"
       PYTHONPATH: "/home/jovyan/shared/libs"
+    networks:
+      - mynetwork
+
+  redis:
+    image: "redis:latest"
+    networks:
+      - mynetwork
+    ports:
+      - "6379:6379"  # Map container port 6379 to host port 6379
+
+
+networks:  # Top-level: Defining the networks
+  mynetwork:  # Name of the network

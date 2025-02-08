@@ -2,49 +2,54 @@ db:
   filepath: '/home/jovyan/db/jupyrun_data.db'
 
 globals:
-  dbserver_uri: 'http://localhost:7990'
+  dbserver_uri: 'http://jupyrun_db:8080'
+  default_port_db: '7990'
+  default_port_jupyter: '7991'
   mattermost_uri: ''
   mattermost_incoming: ''
   loglevel: INFO
 
 
 storage_locations:
-  # redmine:
-  #   url: 'https://my_redmine_server.domain'
-  #   login: 'path/to/your/token/file/info.rm'
-  #   kwargs: 
-  #     default_project: 'jupy_runner'
-  #   run_async: 1
+  itop: {}
+      # url: 'https://itsm.mpifr-bonn.mpg.de'
+      # login_info: ''
+      # run_async: 0
+      # kwargs: 
+      #   project_id: '/my/itop/project'
+      
 
-  nextcloud:
-    url: 'https://my_nextcloud_server.domain'
-    # login: '/home/jovyan/db/info.hash'
-    login: 'path/to/your/token/file/encrypted/by/Fernet/info.hash'
-    run_async: 0
-    kwargs: 
-      default_dir: '/your/nextcloud/path'
+  # nextcloud: # all other config info is in .env file since it should be private
+  #   run_async: 0
+  #   kwargs: {}
+  #   login_info: ""
     
-
   local: null         # will save to default_dir_meas on null
 
-
 wiki_uploader:
-  redmine:
-    url: 'https://my_redmine_server.domain'
-    login: '/home/jovyan/db/info.rm'
-    project_id: jupy_runner
-
-
+  redmine:  {} # all config info is in .env file since it should be private
     
 pathes:
   default_dir_meas: '/home/jovyan/shared/meas/'
   default_dir_repo: '/home/jovyan/shared/repos/'
-  default_dir_docs: '/home/jovyan/shared/meas/loose_docs'
+  default_dir_docs: '/home/jovyan/shared/loose_docs/'
+  default_dir_libs: '/home/jovyan/shared/libs/'
+  
 
 procserver:
   do_direct_running: 0
   terminate_timeout_sec: 5
-  t_interval: 15
+
   run_script_path: run_script.py
   pythonpath_for_win: 'python'
   user_info_verbosity: 2 # 0=no user info, 1=only text, 2=text and markdown
+  
+  timeout_redis: 0.1  # timeout on redis calls (this will make redis checks effectively non blocking)
+  t_interval: 30
+  t_info: 360         # reporting period
+  t_sleep: 0.5        # period between checks on redis 
+
+
+redis: 
+  host: 'redis'
+  port: 6379

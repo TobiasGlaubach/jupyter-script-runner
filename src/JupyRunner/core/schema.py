@@ -5,6 +5,7 @@ import re
 
 
 from typing import Optional, List
+from pydantic import field_validator
 from sqlmodel import Field, SQLModel, Relationship, Enum, String, Column, JSON
 
 from JupyRunner.core import helpers
@@ -119,12 +120,19 @@ class Device(SQLModel, table=True):
     scripts: list["Script"] = Relationship(back_populates="device", sa_relationship_kwargs={"lazy": "selectin"})
     datafiles: list["Datafile"] = Relationship(back_populates="device", sa_relationship_kwargs={"lazy": "selectin"})
     
+
+    @field_validator('last_time_changed', mode='before')
+    def parse_dt(cls, v):
+        if isinstance(v, str):
+            return helpers.parse_zulutime(v)
+        return v
     
     def append_error_msg(self, err):
         self.errors += '\n' + str(err)
     
     def get_url_full(self):
-        url = config.get('globals', {}).get('dbserver_uri')
+        url = helpers.get_db_url(config=config)
+
         return f'{url}/device/{self.id}'
 
     def get_link_md(self):
@@ -199,6 +207,19 @@ class Script(SQLModel, table=True):
 
     device: Device | None = Relationship(back_populates="scripts", sa_relationship_kwargs={"lazy": "selectin"})
     datafiles: list["Datafile"] = Relationship(back_populates="script", sa_relationship_kwargs={"lazy": "selectin"})
+
+    @field_validator('status', mode='before')
+    def parse_status(cls, v):
+        if isinstance(v, str):
+            return STATUS(v)
+        return v
+    
+    @field_validator('last_time_changed', 'start_condition', 'end_condition', 'time_initiated', 'time_started', 'time_finished', mode='before')
+    def parse_dt(cls, v):
+        if isinstance(v, str):
+            return helpers.parse_zulutime(v)
+        return v
+    
 
     def before_commit(self):
         assert self.id < 1725603466, f'{self.id=} are you trying to commit a timestamp to an id?'
@@ -320,7 +341,7 @@ class Script(SQLModel, table=True):
 
     
     def get_url_full(self):
-        url = config.get('globals', {}).get('dbserver_uri')
+        url = helpers.get_db_url(config=config)
         return f'{url}/script/{self.id}'
 
     def get_link_md(self):
@@ -330,11 +351,11 @@ class Script(SQLModel, table=True):
         if not self.device_id:
             return 'no_device'
         
-        url = config.get('globals', {}).get('dbserver_uri')
+        url = helpers.get_db_url(config=config)
         return f'[{self.device_id}]({url}/device/{self.device_id})'
     
     def get_showpath_md(self):
-        url = config.get('globals', {}).get('dbserver_uri')
+        url = helpers.get_db_url(config=config)
         outp = self.script_out_path
         if outp:
             name = os.path.basename(outp)
@@ -414,6 +435,25 @@ class Datafile(SQLModel, table=True):
     script: Script | None = Relationship(back_populates="datafiles", sa_relationship_kwargs={"lazy": "selectin"})
     device: Device | None = Relationship(back_populates="datafiles", sa_relationship_kwargs={"lazy": "selectin"})
 
+    @field_validator('status', mode='before')
+    def parse_status(cls, v):
+        if isinstance(v, str):
+            return STATUS_DATAFILE(v)
+        return v
+    
+    @field_validator('data_type', mode='before')
+    def parse_data_type(cls, v):
+        if isinstance(v, str):
+            return DATAFILE_TYPE(v)
+        return v
+    
+
+    @field_validator('last_time_changed', 'time_initiated', mode='before')
+    def parse_dt(cls, v):
+        if isinstance(v, str):
+            return helpers.parse_zulutime(v)
+        return v
+    
     def append_error_msg(self, err):
         self.errors += '\n' + str(err)
 
@@ -464,13 +504,25 @@ def to_md(self, base_url):
 class ProjectVariable(SQLModel, table=True):
     id: str = Field(primary_key=True, unique=True)
     data_json: Optional[dict] = Field(sa_column=Column(JSON), default_factory=lambda: {})
-    data_json: Optional[dict] = Field(sa_column=Column(JSON), default_factory=lambda: {})
+    
 
     time_initiated: datetime.datetime = Field(nullable=False, default_factory=helpers.get_utcnow)
     last_time_changed: datetime.datetime = Field(nullable=False, default_factory=helpers.get_utcnow)
 
+    @field_validator('last_time_changed', 'time_initiated', mode='before')
+    def parse_dt(cls, v):
+        if isinstance(v, str):
+            return helpers.parse_zulutime(v)
+        return v
+    
     def append_error_msg(self, err):
         self.errors += '\n' + str(err)
+
+
+    class Config:
+        json_encoders = {
+            datetime: lambda dt: helpers.make_zulustr(dt)
+        }
 
 schema_dc = {cls.__name__: cls.__tablename__ for cls in [Script, Datafile, ProjectVariable, Device]}
 schema_cls_dc = {cls: cls.__tablename__ for cls in [Script, Datafile, ProjectVariable, Device]}

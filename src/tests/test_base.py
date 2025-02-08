@@ -1,8 +1,6 @@
 import time
 import pytest
 
-from sqlmodel import Session, create_engine, SQLModel, select
-
 import os, inspect, sys
 current_dir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
 parent_dir = os.path.dirname(current_dir)
@@ -84,7 +82,7 @@ def test_get_showpath_md():
     expected_s = f'[testing_script](http://localhost:8000/show/{outp})'
     assert s.get_showpath_md() == expected_s
 
-    
+
 if __name__ == '__main__':
     pytest.main([__file__])
 
