@@ -19,10 +19,14 @@ if __name__ == '__main__':
     
 
 from JupyRunner.core.helpers import limit_len, logging, log, make_zulustr, parse_zulutime, iso_now, get_primary_ip, get_sys_id, get_uid
-    
+from JupyRunner.core.redis_interface import RedisApi
+
+
 log_parent = log
 log = log_parent.getChild('jpy_client')
 log.setLevel(logging.INFO)
+
+rapi = None
 
 
 class BaseAPIClient:
@@ -394,7 +398,7 @@ class ServerApi(object):
         return res
     
 
-    def user_get_feedback(self, msg, request_type='confirm', script_id=None, script_uid=None, request_id=None, device_id=None, t_poll_sec=2.0, verb=0, ret_all=False, doc=None):
+    def user_get_feedback(self, msg, request_type='confirm', script_id=None, script_uid=None, request_id=None, device_id=None, t_poll_sec=2.0, verb=0, ret_all=False, doc=None, use_polling=False):
         """
         Gets user feedback through the API.
 
@@ -468,25 +472,32 @@ class ServerApi(object):
 
         log.info(f'Requesting User Feedback with {request_id=} {request_type=} and {script_uid=}|{script_id=}. Message = {limit_len(msg, 200)}')
         res = self.api.post(route, json=data, ret_raw=True).json()
+        if use_polling:
+            
+            # HACK: hacky :-( should implement something fancy, but non blocking... for now leave like this
+            route = f'/user_feedback/check'
 
+            i = 0
+            while 1:
+                time.sleep(t_poll_sec)
+                res = self.api.get(route, params={'id':request_id}, ret_raw=True).json()
+                i += 1
+                if verb and i % verb == 0:
+                    log.info(f'get_user_feedback for id="{request_id}" still polling...')
+                if res:
+                    break
+            r = res.get('request', {})
+            a = res.get('answer', {})
+            assert r, 'no data in response object'
+            assert a, 'no answer in response object'
+            assert r['id'] == a['id'], f"request id and answer id are different! This should not be the case! {r['id']=} {a['id']=}"
+        else:
+            global rapi
+            if rapi is None:
+                rapi = RedisApi()
+            generator = rapi.listen_pubsub(rapi.subscribe_user_feedback_reply(), decode_type='json')
+            a = next((a for a in generator if r['id'] == a['id']))
 
-        # HACK: hacky :-( should implement something fancy, but non blocking... for now leave like this
-        route = f'/user_feedback/check'
-
-        i = 0
-        while 1:
-            time.sleep(t_poll_sec)
-            res = self.api.get(route, params={'id':request_id}, ret_raw=True).json()
-            i += 1
-            if verb and i % verb == 0:
-                log.info(f'get_user_feedback for id="{request_id}" still polling...')
-            if res:
-                break
-        r = res.get('request', {})
-        a = res.get('answer', {})
-        assert r, 'no data in response object'
-        assert a, 'no answer in response object'
-        assert r['id'] == a['id'], f"request id and answer id are different! This should not be the case! {r['id']=} {a['id']=}"
         request_type = r.get('request_type')
 
         success = a.get('success')
