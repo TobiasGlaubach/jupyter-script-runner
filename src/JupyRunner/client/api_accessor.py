@@ -174,7 +174,6 @@ class ServerApi(object):
         assert script_id, 'script_id can not be None or empty!'
         return self.api.get(f'script/{script_id}')
 
-
     def get_script_full(self, script_id=None):
         if script_id is None:
             script_id = self.script_id
@@ -182,7 +181,47 @@ class ServerApi(object):
         assert script_id, 'script_id can not be None or empty!'
         return self.api.get(f'script_full/{script_id}')
 
+    def comment_append(self, text, script_id=None):
+        """
+        Append a comment to a script.
 
+        Parameters:
+        text (str): The text of the comment.
+        script_id (int, optional): The ID of the script. If not provided, the current script_id is used.
+
+        Returns:
+        Response: The response from the API.
+        """
+        if script_id is None:
+            script_id = self.script_id
+        return self.api.post(f'comment/script/{script_id}', json=dict(text=text))
+
+    def comment_append_device(self, text, device_id=None):
+        """
+        Append a comment to a device.
+
+        Parameters:
+        text (str): The text of the comment.
+        device_id (int, optional): The ID of the device.
+
+        Returns:
+        Response: The response from the API.
+        """
+        return self.api.post(f'comment/device/{device_id}', json=dict(text=text))
+
+    def comment_append_datafile(self, text, datafile_id=None):
+        """
+        Append a comment to a datafile.
+
+        Parameters:
+        text (str): The text of the comment.
+        datafile_id (int, optional): The ID of the datafile.
+
+        Returns:
+        Response: The response from the API.
+        """
+        return self.api.post(f'comment/datafile/{datafile_id}', json=dict(text=text))
+    
     def upload_file(self, script_id=None, filename:str='', byte_data:bytes=b'', mimetype=None):
         """Uploads a file to a script.
 
@@ -473,7 +512,7 @@ class ServerApi(object):
         log.info(f'Requesting User Feedback with {request_id=} {request_type=} and {script_uid=}|{script_id=}. Message = {limit_len(msg, 200)}')
         res = self.api.post(route, json=data, ret_raw=True).json()
         if use_polling:
-            
+
             # HACK: hacky :-( should implement something fancy, but non blocking... for now leave like this
             route = f'/user_feedback/check'
 
