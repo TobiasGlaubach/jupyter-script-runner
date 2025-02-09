@@ -19,7 +19,7 @@ import urllib.parse
 import asyncio
 import warnings
 
-from fastapi import FastAPI, Form, HTTPException, Path, Query, Request, Response, UploadFile, File, Response, Depends
+from fastapi import FastAPI, WebSocket, Form, HTTPException, Path, Query, Request, Response, UploadFile, File, Response, Depends
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -82,7 +82,23 @@ helpers.logging.getLogger('sqlalchemy.orm').setLevel(helpers.logging.WARNING)
 
 log.info('STARTED!')
 
-app = FastAPI()
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup: Initialize Redis Pub/Sub
+    app.rapi = redis_interface.RedisApi()
+    app.redis_pubsub_usr = app.rapi.r.pubsub()
+    app.redis_pubsub_usr.subscribe(redis_interface.channel_user_feedback_new)
+
+    yield  # This yields control to the app
+
+    # Shutdown: Close Redis connection
+    app.redis_pubsub_usr.unsubscribe(redis_interface.channel_user_feedback_new)
+    app.redis_pubsub_usr.close()
+
+
+
+app = FastAPI(lifespan=lifespan)
+
 templates = Jinja2Templates(directory="templates")  # You can use this for more complex templates
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
@@ -96,18 +112,11 @@ app.mount("/libs", StaticFiles(directory=filesys_storage_api.default_dir_libs), 
 feedback_requests = {}
 feedback_answers = {}
 
-# @asynccontextmanager
-# async def lifespan(app: FastAPI):
-#     global serializers
 
-#     log.info('STARTED!')
+# Store connected websockets
+connected_websockets = set()
 
-#     yield
 
-#     for k, v in serializers.items():
-#         v.destruct()
-
-#     log.info('END!')
 
 
 @app.middleware("http")
@@ -157,6 +166,12 @@ async def ui(page:str, request: Request):
     rendered_html = template.render(context)
     return HTMLResponse(status_code=200, content=rendered_html)
 
+# @app.get("/testpage", response_class=HTMLResponse)
+# async def read_root(request: Request):
+#     template = templates.get_template(f'test.html')
+#     context = {"url_for": request.url_for, "jupyter_url": jupyter_url, 'dbserver_uri': dbserver_uri, 'dbserver_ws': dbserver_uri.replace('http://', 'ws://')}
+#     rendered_html = template.render(context)
+#     return HTMLResponse(status_code=200, content=rendered_html)
 
 
 @app.get("/info")
@@ -1625,6 +1640,7 @@ async def user_feedback_create(req: usr.UserFeedbackRequest)-> Dict[str, Any]:
     
     limit_number_of_open_feedbacks()
     feedback_requests[id_] = req        
+    rapi.send_user_feedback(req)
     return {'success': True, 'id': req.id, 'request': feedback_requests.get(id_, None)}
 
 
@@ -1653,6 +1669,58 @@ async def user_feedback_check(id = Query(description='The id of the request to w
         # keep reuqest for logging it as it is marked as done and will be removed later
         return {'request': feedback_requests.get(id), 'answer': feedback_answers.pop(id)}
     
+
+async def userfeedback_event_generator(request: Request, only_running, dummy):
+
+
+    # Generate some dummy data
+    global feedback_requests, feedback_answers
+    log.debug(f'userfeedback_event_generator?{dummy=}')
+
+    if dummy:
+        t = 1738700000
+        script = dbi.get(schema.Script, 1)
+        if not script is None:
+            script_uid = os.path.basename(script.script_out_path)
+            script_id = 1
+            device_id = script.device_id
+        else:
+            script_uid = ''
+            script_id = 0
+            device_id = 'no_device'
+
+        dummy = lambda x: usr.UserFeedbackRequest(message=f'Dummy Request for {x}  '*10, request_type=x, id=helpers.get_uid(), script_id=script_id, script_uid=script_uid, device_id=device_id, timestamp=t)
+        allowed = 'confirm file files picture pictures text int float info info info'.split()
+        current_requests = [dummy(x) for x in allowed]
+    else:            
+        current_requests = list(feedback_requests.values())
+        if only_running or only_running is None and len(current_requests) > 100:
+            stati = [s for s in schema.STATUS if not s in [schema.STATUS.FAILED, schema.STATUS.CANCELLED, schema.STATUS.ABORTED, schema.STATUS.FAULTY, schema.STATUS.FINISHED]]
+            res = dbi.qry_scripts(stati=stati)
+            current_requests = [r for r in current_requests if any((r.match_script(s) for s in res))]
+            
+    current_requests = [r.update_state() for r in current_requests]
+
+    # previous data
+    for msg_instance in current_requests:
+        msg_json_string = msg_instance.model_dump_json()
+        yield f"data: {msg_json_string}\n\n"  # Format as Server-Sent Event
+    
+
+    while True:
+        msg = await asyncio.to_thread(request.app.redis_pubsub_usr.get_message)  # Bridge to async
+        if msg and msg["type"] == "message":
+            msg_json_string = msg['data'].decode('utf-8')
+            yield f"data: {msg_json_string}\n\n"  # Format as Server-Sent Event
+        await asyncio.sleep(0.1) # Small delay to avoid busy waiting
+
+
+@app.get("/userfeedback_events")
+async def events_endpoint(request: Request, only_running: Optional[int|None] = None, dummy: Optional[int] = None):
+    return StreamingResponse(userfeedback_event_generator(request, only_running, dummy), media_type="text/event-stream")
+
+
+
 
 @app.get("/scriptlogs_qry")
 async def get_script_logs_qry(since: Optional[float|int] = None, only_running: Optional[int|None] = None, dummy: Optional[int] = None) -> list[usr.UserFeedbackRequest]:
