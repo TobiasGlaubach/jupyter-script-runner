@@ -1733,20 +1733,25 @@ async def userfeedback_event_generator(request: Request, only_running, dummy):
                 
         current_requests = [r.update_state() for r in current_requests]
 
-        # previous data
-        for msg_instance in current_requests:
-            msg_json_string = msg_instance.model_dump_json()
-            yield f"data: {msg_json_string}\n\n"  # Format as Server-Sent Event
+        try:
+            # previous data
+            for msg_instance in current_requests:
+                msg_json_string = msg_instance.model_dump_json()
+                yield f"data: {msg_json_string}\n\n"  # Format as Server-Sent Event
+        except Exception as err:
+            log.error(err)
+            traceback.print_exc()
         
-        # async listen for new data
-        r = request.app.rapi
-        pubsub = request.app.redis_pubsub_usr
-        async for msg_json_string in r.listen_pubsub_async(pubsub, t_sleep=0.1):
-            yield f"data: {msg_json_string}\n\n"  # Format as Server-Sent Event
-            
-    except Exception as err:
-        log.error(err)
-        traceback.print_exc()
+
+        try:
+            # async listen for new data
+            r = request.app.rapi
+            pubsub = request.app.redis_pubsub_usr
+            async for msg_json_string in r.listen_pubsub_async(pubsub, t_sleep=0.1):
+                yield f"data: {msg_json_string}\n\n"  # Format as Server-Sent Event
+        except Exception as err:
+            log.error(err)
+            traceback.print_exc()
 
 
 @app.get("/userfeedback_events")

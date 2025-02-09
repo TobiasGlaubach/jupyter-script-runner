@@ -6,7 +6,7 @@ import dateutil.parser, datetime, time, logging, sys
 import yaml
 
 
-log_level = logging.DEBUG
+log_level = logging.INFO
 
 
 log = logging.getLogger('jpy')
