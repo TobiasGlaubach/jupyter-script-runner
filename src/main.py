@@ -1701,47 +1701,52 @@ async def user_feedback_check(id = Query(description='The id of the request to w
     
 
 async def userfeedback_event_generator(request: Request, only_running, dummy):
+    try:
+        
 
 
-    # Generate some dummy data
-    global feedback_requests, feedback_answers
-    log.debug(f'userfeedback_event_generator?{dummy=}')
+        # Generate some dummy data
+        global feedback_requests, feedback_answers
+        log.debug(f'userfeedback_event_generator?{dummy=}')
 
-    if dummy:
-        t = 1738700000
-        script = dbi.get(schema.Script, 1)
-        if not script is None:
-            script_uid = os.path.basename(script.script_out_path)
-            script_id = 1
-            device_id = script.device_id
-        else:
-            script_uid = ''
-            script_id = 0
-            device_id = 'no_device'
+        if dummy:
+            t = 1738700000
+            script = dbi.get(schema.Script, 1)
+            if not script is None:
+                script_uid = os.path.basename(script.script_out_path)
+                script_id = 1
+                device_id = script.device_id
+            else:
+                script_uid = ''
+                script_id = 0
+                device_id = 'no_device'
 
-        dummy = lambda x: usr.UserFeedbackRequest(message=f'Dummy Request for {x}  '*10, request_type=x, id=helpers.get_uid(), script_id=script_id, script_uid=script_uid, device_id=device_id, timestamp=t)
-        allowed = 'confirm file files picture pictures text int float info info info'.split()
-        current_requests = [dummy(x) for x in allowed]
-    else:            
-        current_requests = list(feedback_requests.values())
-        if only_running or only_running is None and len(current_requests) > 100:
-            stati = [s for s in schema.STATUS if not s in [schema.STATUS.FAILED, schema.STATUS.CANCELLED, schema.STATUS.ABORTED, schema.STATUS.FAULTY, schema.STATUS.FINISHED]]
-            res = dbi.qry_scripts(stati=stati)
-            current_requests = [r for r in current_requests if any((r.match_script(s) for s in res))]
+            dummy = lambda x: usr.UserFeedbackRequest(message=f'Dummy Request for {x}  '*10, request_type=x, id=helpers.get_uid(), script_id=script_id, script_uid=script_uid, device_id=device_id, timestamp=t)
+            allowed = 'confirm file files picture pictures text int float info info info'.split()
+            current_requests = [dummy(x) for x in allowed]
+        else:            
+            current_requests = list(feedback_requests.values())
+            if only_running or only_running is None and len(current_requests) > 100:
+                stati = [s for s in schema.STATUS if not s in [schema.STATUS.FAILED, schema.STATUS.CANCELLED, schema.STATUS.ABORTED, schema.STATUS.FAULTY, schema.STATUS.FINISHED]]
+                res = dbi.qry_scripts(stati=stati)
+                current_requests = [r for r in current_requests if any((r.match_script(s) for s in res))]
+                
+        current_requests = [r.update_state() for r in current_requests]
+
+        # previous data
+        for msg_instance in current_requests:
+            msg_json_string = msg_instance.model_dump_json()
+            yield f"data: {msg_json_string}\n\n"  # Format as Server-Sent Event
+        
+        # async listen for new data
+        r = request.app.rapi
+        pubsub = request.app.redis_pubsub_usr
+        async for msg_json_string in r.listen_pubsub_async(pubsub, t_sleep=0.1):
+            yield f"data: {msg_json_string}\n\n"  # Format as Server-Sent Event
             
-    current_requests = [r.update_state() for r in current_requests]
-
-    # previous data
-    for msg_instance in current_requests:
-        msg_json_string = msg_instance.model_dump_json()
-        yield f"data: {msg_json_string}\n\n"  # Format as Server-Sent Event
-    
-    # async listen for new data
-    r = request.app.rapi
-    pubsub = request.app.redis_pubsub_usr
-    async for msg_json_string in r.listen_pubsub_async(pubsub, t_sleep=0.1):
-        yield f"data: {msg_json_string}\n\n"  # Format as Server-Sent Event
-
+    except Exception as err:
+        log.error(err)
+        traceback.print_exc()
 
 
 @app.get("/userfeedback_events")
