@@ -2,6 +2,7 @@ import redis
 import time
 import json
 import datetime
+import asyncio
 
 import os, inspect, sys
 current_dir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
@@ -19,7 +20,10 @@ if not config:
 channel_script_prepare = "script_prepare"
 channel_script_start = "script_start"
 channel_script_scheduleing = "scheduled_tasks"
-channel_script_cancle = "cancle_script"
+channel_script_cancle = "script_cancle"
+channel_user_feedback_new = "user_feedback_new"
+channel_user_feedback_reply = "user_feedback_reply"
+
 
 def _get_messages(pubsub, timeout):
     while msg := pubsub.get_message(timeout=timeout):
@@ -102,6 +106,19 @@ class RedisApi(object):
             except Exception as e:
                 helpers.log.error(f"Error processing scheduled task: {e}")
     
+    def subscribe_channel(self, channel_name):
+        pubsub = self.r.pubsub()
+        pubsub.subscribe(channel_name)
+        helpers.log.info(f'Success: subscribed to Redis channel. "{channel_name}"')
+        return pubsub
+    
+    def publish_to_channel(self, channel_name, msg):
+        if isinstance(msg, dict):
+            msg = json.dumps(msg)
+        elif not isinstance(msg, str):
+            msg = msg.model_dump_json()
+        return self.r.publish(channel_name, msg)
+
 
     def subscribe_script_start(self):
         pubsub = self.r.pubsub()
@@ -127,7 +144,53 @@ class RedisApi(object):
         helpers.log.debug(f'get_messages({pubsub.channels}) --> N={len(ret)} messages')
         return ret
 
+    def subscribe_user_feedback(self):
+        pubsub = self.r.pubsub()
+        pubsub.subscribe(channel_user_feedback_new)
+        helpers.log.info(f'Success: subscribed to Redis channel. "{channel_user_feedback_new}"')
+        return pubsub
 
+    def subscribe_user_feedback_reply(self):
+        pubsub = self.r.pubsub()
+        pubsub.subscribe(channel_user_feedback_reply)
+        helpers.log.info(f'Success: subscribed to Redis channel. "{channel_user_feedback_reply}"')
+        return pubsub
+    
+    def decode_model_json(self, message, decode_type):
+        try:
+            return decode_type.model_validate_json(message["data"])
+        except json.JSONDecodeError:
+            helpers.log.error("Invalid JSON received.")
+        except Exception as e: # Catch any Pydantic validation errors
+            helpers.log.error(f"Pydantic Validation Error: {e}")
+
+    def send_user_feedback(self, msg):
+        if not isinstance(msg, str):
+            msg = msg.model_dump_json()
+        return self.r.publish(channel_user_feedback_new, msg)
+
+    async def listen_pubsub_async(self, pubsub, t_sleep=0.05, decode_type=None):
+        while True:
+            msg = await asyncio.to_thread(pubsub)  # Bridge to async
+            if msg and msg["type"] == "message":
+                if not decode_type is None:
+                    yield self.decode_model_json(msg)
+                else:
+                    yield msg['data'].decode('utf-8')                
+            await asyncio.sleep(t_sleep) # Small delay to avoid busy waiting
+
+    def listen_pubsub(self, pubsub, decode_type='json'):
+        for msg in pubsub.listen():
+            if msg and msg["type"] == "message":
+                if decode_type == 'json' or decode_type == 'dict':
+                    yield json.loads(msg['data'].decode('utf-8'))
+                elif not decode_type is None:
+                    yield self.decode_model_json(msg)
+                else:
+                    yield msg['data'].decode('utf-8')
+
+
+        
 if __name__ == '__main__':
     
     # r = redis.Redis(host='localhost', port=6379, db=0)
