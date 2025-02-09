@@ -390,7 +390,7 @@ class Script(SQLModel, table=True):
             doc_str = ''
 
         markdown_string = f"""
-## Script {self.id} Details
+## Script {self.id} {os.path.basename(self.script_out_path).split('.')[0]}
 
 - **ID:** [{self.id}]({base_url}/script/{self.id})
 - **Device ID:** [{self.device_id}]({base_url}/device/{self.device_id})
