@@ -5,7 +5,8 @@ import os
 import traceback
 from sqlmodel import Session, create_engine, SQLModel, select
 # from sqlalchemy.orm import select_related
-from JupyRunner.core import schema, helpers
+from JupyRunner.core import schema, helpers, redis_interface
+
 from sqlalchemy import desc
 
 
@@ -14,6 +15,10 @@ log = helpers.log
 engine = None
 sqlite_file_name = None
 
+
+rapi = redis_interface.RedisApi()
+def publish_update(obj):
+    return rapi.publish_to_channel(obj.__tablename__, obj)
 
 
 def json_serializer(obj):
@@ -80,7 +85,8 @@ def add_to_db(session, obj):
     if not is_existing:
         session.add(obj)
     session.commit()
-
+    publish_update(obj)
+    
     return obj
 
 def set_propert_sub(session, obj_type:type, obj_id, **kwargs):
@@ -95,12 +101,15 @@ def set_propert_sub(session, obj_type:type, obj_id, **kwargs):
     obj.last_time_changed = helpers.get_utcnow()  # Update timestamp
     session.commit()
     session.refresh(obj)
+    publish_update(obj)
     return obj
     
 
 def set_property(obj_type:type, obj_id, **kwargs):
     with Session(engine) as session:
         return set_propert_sub(session, obj_type, obj_id, **kwargs)
+
+
 
 
 def commit(obj):
@@ -123,6 +132,8 @@ def commit(obj):
             session.add(existing_model)
             session.commit()
             session.refresh(existing_model)
+            publish_update(existing_model)
+
             return existing_model
 
         else:
@@ -141,6 +152,7 @@ def commit(obj):
             
             session.refresh(obj)
             log.debug(f'COMMIT NEW with {obj=}')
+            publish_update(obj)
             return obj # session.get(type(obj), obj.id)
         
 
@@ -151,10 +163,12 @@ def add_many(objs):
         for obj in objs:
             obj.last_time_changed = helpers.get_utcnow()
             session.add(obj)
-
+            
         session.commit()
         for obj in objs:
             session.refresh(obj)
+            publish_update(obj)
+
         return objs
     
 def se():
