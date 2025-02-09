@@ -36,3 +36,5 @@ xmltodict
 numpy
 matplotlib
 pandas
+
+redis
