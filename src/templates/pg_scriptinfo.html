@@ -76,10 +76,6 @@
         <h3>User Live Feedback:</h3>
         <small>(for currently active user feedback) | <a href="/scriptlogs_qry">Click here to show the raw server data</a> | <a href="?dummy=1">Click here to show some dummy requests</a> | <span id="last_tick"></span> <span id="last_tick_ago"></span></small>
         <small>
-            <div class="form-check">
-            <input type="checkbox" class="form-check-input" id="autoRefresh" checked>
-            <label class="form-check-label" for="autoRefresh">Auto refresh</label>
-          </div>
           <div class="form-check">
             <input type="checkbox" class="form-check-input" id="showRunningScripts">
             <label class="form-check-label" for="showRunningScripts">Show only running scripts</label>
@@ -105,7 +101,8 @@
     const replyUrl = '/user_feedback/replyform'
     const qryUrl = '/scriptlogs_qry'
 
-    function formatTimeDiff(timeDiff) {
+    function formatTimeDiff(dt) {
+        const timeDiff = dt * -1;
         const seconds = Math.floor(Math.abs(timeDiff) / 1000);
         const minutes = Math.floor(seconds / 60);
         const hours = Math.floor(minutes / 60);
@@ -194,7 +191,7 @@
             if(!scriptInfo || scriptInfo.length < 1 || isEmpty(scriptInfo)){
                 return;
             }
-            const accordionItems = requestList.querySelectorAll('.accordion-item');
+            const accordionItems = request_list.querySelectorAll('.accordion-item');
             accordionItems.forEach(item => {
                 const collapseElement = item.querySelector('.collapse');
                 if (collapseElement.classList.contains('show')) {
@@ -281,8 +278,8 @@
         console.log(data, el);
         if (!el) {
             if(isNewest) {
-                var requestList = document.getElementById('request_list');
-                const accordionItems = requestList.querySelectorAll('.accordion-item');
+                var request_list = document.getElementById('request_list');
+                const accordionItems = request_list.querySelectorAll('.accordion-item');
                 accordionItems.forEach(item => {
                     const collapseElement = item.querySelector('.collapse');
                     if (collapseElement.classList.contains('show')) {
@@ -786,63 +783,56 @@
         URL.revokeObjectURL(url);
     }
 
+        
 
+    
     reload_globals(0);
 
-    let since = null;
-    let lastTick = new Date();
+    const url = new URL("/userfeedback_events", window.location.origin);
+    var lastTick = new Date();
 
-    function fetchScriptLogs() {
-        if (document.getElementById('autoRefresh').checked) {
-            const url = new URL(qryUrl, window.location.origin);
-            if (since !== null) {
-                url.searchParams.append('since', since);            
-            }
-            if (dummyParam) {
-                url.searchParams.append('dummy', 1);
-            }
-            if (document.getElementById('showRunningScripts').checked) {
-                url.searchParams.append('only_running', 1);
-            }            
-
-            fetch(url)
-                .then(response => response.json())
-                .then(data => {
-                    console.log(data);
-                    let t = -1.0;
-                    let maxIndex = -1;
-
-                    for (let i = 0; i < data.length; i++) {
-                        if (data[i].timestamp && data[i].timestamp > t) {
-                            t = data[i].timestamp;
-                            maxIndex = i;
-                        }
-                    }
-                    
-                    for (let i = 0; i < data.length; i++) {
-                        handleServerInput(data[i], maxIndex===i);
-                    }               
-                    if (t > 0 ) { since = t; }
-                })
-                .catch(error => console.error(error));
-
-                lastTick = new Date();
-                
-        }
-        
-        s = lastTick.toISOString().replace('T', ' ').split('.')[0] + ' (UTC)';
-        document.getElementById('last_tick').innerText = `Last Tick: ${s}`;
-        document.getElementById('last_tick_ago').innerText = formatTimeDiff(new Date() - lastTick);
-
-        if (document.getElementById('request_list').childElementCount === 0) {
-            document.getElementById('feedback').innerHTML = '<hr><strong>-- Nothing to Show--</strong>';
-        } else {
-            document.getElementById('feedback').innerHTML = '';
-        }
+    if (dummyParam) {
+        url.searchParams.append('dummy', 1);
     }
+    if (document.getElementById('showRunningScripts').checked) {
+        url.searchParams.append('only_running', 1);
+    }            
 
-    fetchScriptLogs();
-    setInterval(fetchScriptLogs, 2000);
+    const eventSource = new EventSource(url);
+    eventSource.onmessage = (event) => {
+        console.log("EventSource connection received data", event);
+        const newMessage = JSON.parse(event.data);
+        handleServerInput(newMessage, true);
+
+        lastTick = new Date();
+        const s = lastTick.toISOString().replace('T', ' ').split('.')[0] + ' (UTC)';
+        document.getElementById('last_tick').innerText = `Event Source Connected | Last Tick: ${s}`;
+        document.getElementById('last_tick').style.color = 'green';
+        // const messageDiv = document.createElement("div");
+        // messageDiv.textContent = newMessage.message;
+        // document.getElementById("errorMessage").appendChild(messageDiv);
+    };
+
+    eventSource.onerror = (error) => {
+        console.error("EventSource failed:", error);
+        const txt = "EventSource failed:" + error;
+        const s = lastTick.toISOString().replace('T', ' ').split('.')[0] + ' (UTC)';
+        document.getElementById('last_tick').innerText = `${txt} | Last Tick: ${s}`;
+        document.getElementById('last_tick').style.color = 'red';
+        eventSource.close(); // Close the connection if an error occurs
+    };
+
+    // Optional: Handle the open event
+    eventSource.onopen = () => {
+        console.log("Event Source Connected");
+        document.getElementById('last_tick').innerText = 'Event Source Connected';
+        document.getElementById('last_tick').style.color = 'green';
+    };    
+    
+    setInterval(function () {
+        document.getElementById('last_tick_ago').innerText = ' | ' + formatTimeDiff(new Date() - lastTick);
+    }, 100);
+    
 
     //fetchRequest();
 
