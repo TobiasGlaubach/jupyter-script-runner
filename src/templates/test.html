@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Server-Sent Events Example</title>
+</head>
+<body>
+    <h1>Server-Sent Events</h1>
+    <div id="event-container"></div>
+
+    <script>
+        const eventSource = new EventSource("/events");
+
+        eventSource.onmessage = (event) => {
+            const eventContainer = document.getElementById("event-container");
+            const messageDiv = document.createElement("div");
+            messageDiv.textContent = event.data;
+            eventContainer.appendChild(messageDiv);
+        };
+
+        eventSource.onerror = (error) => {
+            console.error("EventSource failed:", error);
+            eventSource.close(); // Close the connection if an error occurs
+        };
+
+        // Optional: Handle the open event
+        eventSource.onopen = () => {
+          console.log("EventSource connection opened");
+        };
+
+
+    </script>
+</body>
+</html>
