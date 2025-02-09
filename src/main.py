@@ -1178,7 +1178,36 @@ def _action_script(kwargs, test_only=False):
     info = 'success' if success else errormsg
     return {'success': success, 'kwargs': kwargs, 'info': info, 'result': res, 'test_only': test_only, 'error': errormsg, 'color': color}
 
+def _add_comments(comment_data, tp, id_):
+    try:
+        with dbi.se() as session:
+            obj = session.get(tp, id_)
+            if obj is None:
+                raise HTTPException(status_code=404, detail=f"Script {id_=} not found in db")
 
+            if 'text' in comment_data:
+                obj.comments += '\n'
+                obj.comments = str(obj.comments) + f'  [{helpers.now_iso()}] | {comment_data["text"]}'
+                dbi.publish_update(obj)
+            return obj
+    
+    except Exception as err:
+        log.exception(err)
+        s = traceback.format_exception(err, limit=5)
+        return dict(error=s), 500
+    
+    
+@app.post('/comment/script/{script_id}')
+def comment_script(script_id:int, comment_data: dict) -> schema.Script:
+    return _add_comments(comment_data, schema.Script, script_id)
+
+@app.post('/comment/device/{device_id}')
+def comment_device(device_id:str, comment_data: dict) -> schema.Device:
+    return _add_comments(comment_data, schema.Device, device_id)
+
+@app.post('/comment/datafile/{datafile_id}')
+def comment_datafile(datafile_id:int, comment_data: dict) -> schema.Datafile:
+    return _add_comments(comment_data, schema.Datafile, datafile_id)
 
 
 
@@ -1576,7 +1605,8 @@ def _user_feedback_reply(reply:usr.UserFeedbackReply):
 
     if res:
         feedback_answers[reply.id] = input_data
-
+        rapi.publish_to_channel(redis_interface.channel_user_feedback_reply, input_data)
+    
     return res, reply, input_data, req
 
 
@@ -1706,13 +1736,12 @@ async def userfeedback_event_generator(request: Request, only_running, dummy):
         msg_json_string = msg_instance.model_dump_json()
         yield f"data: {msg_json_string}\n\n"  # Format as Server-Sent Event
     
+    # async listen for new data
+    r = request.app.rapi
+    pubsub = request.app.redis_pubsub_usr
+    async for msg_json_string in r.listen_pubsub_async(pubsub, t_sleep=0.1):
+        yield f"data: {msg_json_string}\n\n"  # Format as Server-Sent Event
 
-    while True:
-        msg = await asyncio.to_thread(request.app.redis_pubsub_usr.get_message)  # Bridge to async
-        if msg and msg["type"] == "message":
-            msg_json_string = msg['data'].decode('utf-8')
-            yield f"data: {msg_json_string}\n\n"  # Format as Server-Sent Event
-        await asyncio.sleep(0.1) # Small delay to avoid busy waiting
 
 
 @app.get("/userfeedback_events")
