@@ -171,7 +171,7 @@ class RedisApi(object):
 
     async def listen_pubsub_async(self, pubsub, t_sleep=0.05, decode_type=None):
         while True:
-            msg = await asyncio.to_thread(pubsub)  # Bridge to async
+            msg = await asyncio.to_thread(pubsub.get_message)  # Bridge to async
             if msg and msg["type"] == "message":
                 if not decode_type is None:
                     yield self.decode_model_json(msg)
