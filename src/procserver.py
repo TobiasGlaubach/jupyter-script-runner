@@ -276,33 +276,34 @@ def tick_cancelling(do_qry):
 
         log.info('DONE CHECKING with ' + str(script))
         
-def tick_housekeeping():
+def tick_housekeeping(do_qry):
     log.debug(f'tick_housekeeping...')
     # initial checks
-    stati = [schema.STATUS.RUNNING]
-    scripts = api.qry(stati=stati)
+    if do_qry:
+        stati = [schema.STATUS.RUNNING]
+        scripts = api.qry(stati=stati)
 
-    log.debug(f'got N={len(scripts)} scripts which need attention...')
+        log.debug(f'got N={len(scripts)} scripts which need attention...')
 
-    for script in scripts:
-        stat = ''
-        try:
-            if not test_is_running(script.id):
+        for script in scripts:
+            stat = ''
+            try:
+                if not test_is_running(script.id):
+                    stat = schema.STATUS.FAULTY
+            except Exception as err:
+                script.append_error_msg(str(err))
+                log.error('ERROR: ' + str(err))
                 stat = schema.STATUS.FAULTY
-        except Exception as err:
-            script.append_error_msg(str(err))
-            log.error('ERROR: ' + str(err))
-            stat = schema.STATUS.FAULTY
-        
-        if stat:
-            log.debug('setting status... ' + stat)
-            script = set_prop_remote(script, status=stat, errors=script.errors)
-        log.info('DONE CHECKING with ' + str(script))
             
+            if stat:
+                log.debug('setting status... ' + stat)
+                script = set_prop_remote(script, status=stat, errors=script.errors)
+            log.info('DONE CHECKING with ' + str(script))
+                
 
 
 
-def tick_cleanup():
+def tick_cleanup(do_qry):
     log.debug(f'tick_cleanup...')
     # clean up if finished
     to_remove = []
@@ -391,8 +392,8 @@ def tick(do_qry=False):
     log.debug(f'tick... ')
     tick_awaiting_check(do_qry)
     tick_cancelling(do_qry)
-    tick_cleanup()
-    tick_housekeeping()
+    tick_cleanup(do_qry)
+    tick_housekeeping(do_qry)
     tick_start(do_qry)
     log.debug(f'tick... DONE')
 
@@ -481,7 +482,7 @@ def run():
                 log.info('procserver is still alive!')
                 update_ticker(t_sleep)
 
-            if (now - tlast_query) > t_sleep:
+            if (now - tlast_query) > t_interval:
                 tlast_query = now
                 do_qry = True
             else:
