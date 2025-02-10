@@ -74,7 +74,13 @@ timeout_redis = config.get('procserver', {}).get('timeout_redis', 0.1)
 
 def get_scripts_redis(pubsub):
     script_ids = rapi.get_messages(pubsub, timeout_redis)
+    
+    if script_ids:
+        chans = list(pubsub.channels)
+        helpers.log.info(f'Redis PubSub: {chans=} Got N={len(script_ids)} --> {script_ids=}')
+        
     scripts = [get_script(sid) for sid in script_ids]
+    
     return [x for x in scripts if not x is None]
 
 def test_shall_I_run_this_script(script, by_ip=False):

@@ -173,10 +173,10 @@ class RedisApi(object):
         while True:
             msg = await asyncio.to_thread(pubsub.get_message)  # Bridge to async
             if msg and msg["type"] == "message":
-                if not decode_type is None:
-                    yield self.decode_model_json(msg)
+                if decode_type is None:
+                    yield msg['data'].decode('utf-8')    
                 else:
-                    yield msg['data'].decode('utf-8')                
+                    yield self.decode_model_json(msg)
             await asyncio.sleep(t_sleep) # Small delay to avoid busy waiting
 
     def listen_pubsub(self, pubsub, decode_type='json'):

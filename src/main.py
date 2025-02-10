@@ -1740,15 +1740,17 @@ async def userfeedback_event_generator(request: Request, only_running, dummy):
         traceback.print_exc()
     
 
-    # try:
-    #     # async listen for new data
-    #     r = request.app.rapi
-    #     pubsub = request.app.redis_pubsub_usr
-    #     async for msg_json_string in r.listen_pubsub_async(pubsub, t_sleep=0.1):
-    #         yield f"data: {msg_json_string}\n\n"  # Format as Server-Sent Event
-    # except Exception as err:
-    #     log.error(err)
-    #     traceback.print_exc()
+    try:
+        # async listen for new data
+        r = request.app.rapi
+        pubsub = request.app.redis_pubsub_usr
+        log.info('/userfeedback_events --> starting listening for new events')
+        async for msg_json_string in r.listen_pubsub_async(pubsub, t_sleep=0.1):
+            log.info('/userfeedback_events --> new event!')
+            yield f"data: {msg_json_string}\n\n"  # Format as Server-Sent Event
+    except Exception as err:
+        log.error(err)
+        traceback.print_exc()
 
 
 @app.get("/userfeedback_events")
