@@ -74,11 +74,11 @@ timeout_redis = config.get('procserver', {}).get('timeout_redis', 0.1)
 
 def get_scripts_redis(pubsub):
     script_ids = rapi.get_messages(pubsub, timeout_redis)
-    
+    script_ids = set(script_ids)
     if script_ids:
         chans = list(pubsub.channels)
         helpers.log.info(f'Redis PubSub: {chans=} Got N={len(script_ids)} --> {script_ids=}')
-        
+
     scripts = [get_script(sid) for sid in script_ids]
     
     return [x for x in scripts if not x is None]
@@ -222,7 +222,7 @@ def tick_awaiting_check(do_qry):
 
     for script in scripts:
         try:
-            log.info('CHECKING for ' + str(script))
+            log.info(f'CHECKING for {script.id=} --> {script.status=} | {script.script_out_path}')
 
             
             log.debug('checking...')
@@ -242,7 +242,7 @@ def tick_awaiting_check(do_qry):
         
         script.status = stat
 
-        log.info(f'DONE CHECKING with {script.id} --> {stat}')
+        log.info(f'DONE CHECKING with {script.id=} --> {script.status=} | {script.script_out_path}')
 
         script = commit(script)
         # if sufficiently close start time
@@ -280,7 +280,7 @@ def tick_cancelling(do_qry):
         log.debug('setting status... ' + stat)
         script = set_prop_remote(script, status=stat, errors=script.errors)
 
-        log.info('DONE CHECKING with ' + str(script))
+        log.info(f'DONE CHECKING  with {script.id=} --> {script.status=} | {script.script_out_path}')
         
 def tick_housekeeping(do_qry):
     log.debug(f'tick_housekeeping...')
@@ -304,7 +304,7 @@ def tick_housekeeping(do_qry):
             if stat:
                 log.debug('setting status... ' + stat)
                 script = set_prop_remote(script, status=stat, errors=script.errors)
-            log.info('DONE CHECKING with ' + str(script))
+            log.info(f'DONE CHECKING  with {script.id=} --> {script.status=} | {script.script_out_path}')
                 
 
 
@@ -359,7 +359,7 @@ def tick_start(do_qry):
                 script.test_for_start_condition() and \
                     (test_shall_I_run_this_script(script) or test_shall_I_run_this_script(script, by_ip=True)):
                 
-                log.info('STARTING PROCESSING for ' + str(script))
+                log.info(f'STARTING PROCESSING with {script.id=} --> {script.status=} | {script.script_out_path}')
                 log.debug('setting status... ' + schema.STATUS.STARTING)
                 script = set_prop_remote(script, status = schema.STATUS.STARTING)
                 assert script.status == schema.STATUS.STARTING
@@ -371,8 +371,7 @@ def tick_start(do_qry):
                     
                 else:
                     start_job(script.id)
-
-                    log.info('DONE STARTING with ' + str(script))
+                    log.info(f'DONE STARTING with {script.id=} --> {script.status=} | {script.script_out_path}')
             else:
                 log.debug('test_is_running:          ' + str(test_is_running(key)))
                 log.debug('test_for_start_condition: ' + str(script.test_for_start_condition()))
