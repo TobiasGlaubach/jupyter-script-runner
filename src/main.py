@@ -1184,7 +1184,9 @@ def _add_comments(comment_data, tp, id_):
             if 'text' in comment_data:
                 obj.comments += '\n'
                 obj.comments = str(obj.comments) + f'  [{helpers.now_iso()}] | {comment_data["text"]}'
+                session.commit()
                 dbi.publish_update(obj)
+                
             return obj
     
     except Exception as err:
@@ -1766,7 +1768,7 @@ async def get_script_logs_qry(since: Optional[float|int] = None, only_running: O
             
     current_requests = _get_current_requests_sub(only_running, dummy)
     current_requests = [s for s in current_requests if not isinstance(s, str)]
-    
+
     if since:
         if not isinstance(since, (int, float)) or since <= 0:
             return JSONResponse(status_code=406, content={"error": f'argument "since" must be either float or int but was {type(since)=} with {since=}'})

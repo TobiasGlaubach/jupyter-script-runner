@@ -181,7 +181,7 @@ class ServerApi(object):
         assert script_id, 'script_id can not be None or empty!'
         return self.api.get(f'script_full/{script_id}')
 
-    def script_comment_append(self, text, script_id=None):
+    def comment_append_script(self, text, script_id=None):
         """
         Append a comment to a script.
 
@@ -194,7 +194,7 @@ class ServerApi(object):
         """
         if script_id is None:
             script_id = self.script_id
-        return self.api.post(f'comment/script/{script_id}', json=dict(text=text))
+        return self.api.post(f'comment/script/{script_id}', json=dict(text=text), ret_raw=True).json()
 
     def comment_append_device(self, text, device_id=None):
         """
@@ -207,7 +207,7 @@ class ServerApi(object):
         Returns:
         Response: The response from the API.
         """
-        return self.api.post(f'comment/device/{device_id}', json=dict(text=text))
+        return self.api.post(f'comment/device/{device_id}', json=dict(text=text), ret_raw=True).json()
 
     def comment_append_datafile(self, text, datafile_id=None):
         """
@@ -220,7 +220,7 @@ class ServerApi(object):
         Returns:
         Response: The response from the API.
         """
-        return self.api.post(f'comment/datafile/{datafile_id}', json=dict(text=text))
+        return self.api.post(f'comment/datafile/{datafile_id}', json=dict(text=text), ret_raw=True).json()
     
     def upload_file(self, script_id=None, filename:str='', byte_data:bytes=b'', mimetype=None):
         """Uploads a file to a script.
@@ -436,20 +436,6 @@ class ServerApi(object):
         res = self.api.post(route, json=data, ret_raw=True).json()
         return res
     
-    def script_comment_append(self, text, script_id=None):
-        """
-        Append a comment to a script.
-
-        Parameters:
-        text (str): The text of the comment.
-        script_id (int, optional): The ID of the script. If not provided, the current script_id is used.
-
-        Returns:
-        Response: The response from the API.
-        """
-        if script_id is None:
-            script_id = self.script_id
-        return self.api.post(f'comment/script/{script_id}', json=dict(text=text))
     
     def user_get_feedback(self, msg, request_type='confirm', script_id=None, script_uid=None, request_id=None, device_id=None, t_poll_sec=2.0, verb=0, ret_all=False, doc=None, use_polling=False):
         """
