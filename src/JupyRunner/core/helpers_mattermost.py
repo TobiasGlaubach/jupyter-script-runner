@@ -64,7 +64,7 @@ def send_mattermost(subject, emoji = ''):
 
 
 
-def handle_webhook_request(data, feedback_requests, _user_feedback_reply) -> dict:
+async def handle_webhook_request(data, feedback_requests, _user_feedback_reply) -> dict:
     try:
         if data.get('trigger_word') in '#open #status'.split():
             
@@ -98,8 +98,7 @@ def handle_webhook_request(data, feedback_requests, _user_feedback_reply) -> dic
                 assert reply.response_type == req.request_type, f'expected was feedback of type: {req.request_type} but given was response of type: {reply.response_type}'
                 could_parse, errors = reply.parse(allow_confirm=True)
                 if could_parse and not errors:
-                    res, reply, input_data, req = _user_feedback_reply(reply)
-                    input_data
+                    res, reply, input_data, req = await _user_feedback_reply(reply)
                     text = f'Found Reply for feedback request "{reply_for}" ({req.request_type}): {reply_text} --> success={reply.success} value={reply.value}'
                 else:
                     text = f'Found Reply for feedback request "{reply_for}" ({req.request_type}): {reply_text} --> ERROR: {errors}'

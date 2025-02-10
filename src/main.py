@@ -71,7 +71,7 @@ for module in modules:
 redmine_api.setup(config['wiki_uploader'])
 
 
-rapi = redis_interface.RedisApi()
+rapi = None
 
 serializers = {k:v.start(config) for k, v in serializers.items() if k in config.get('storage_locations')}
 
@@ -84,16 +84,17 @@ log.info('STARTED!')
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    global rapi
     # Startup: Initialize Redis Pub/Sub
-    app.rapi = redis_interface.RedisApi()
+    app.rapi = rapi = redis_interface.AsyncRedisApi()
     app.redis_pubsub_usr = app.rapi.r.pubsub()
-    app.redis_pubsub_usr.subscribe(redis_interface.channel_user_feedback_new)
+    await app.redis_pubsub_usr.subscribe(redis_interface.channel_user_feedback_new)
 
     yield  # This yields control to the app
 
     # Shutdown: Close Redis connection
-    app.redis_pubsub_usr.unsubscribe(redis_interface.channel_user_feedback_new)
-    app.redis_pubsub_usr.close()
+    await app.redis_pubsub_usr.unsubscribe(redis_interface.channel_user_feedback_new)
+    await app.redis_pubsub_usr.close()
 
 
 
@@ -331,14 +332,14 @@ def get_script_full(script_id):
     
 # Create a new script
 @app.post("/script")
-def create_script(script: schema.Script) -> schema.Script:
+async def create_script(script: schema.Script) -> schema.Script:
     log.debug('POST /script')
     assert script.id is None or script.id < 1725603466, f'{script.id=} are you trying to commit a timestamp to an id?'
     res = dbi.commit(script)
     if res.status in [schema.STATUS.AWAITING_CHECK, schema.STATUS.INITIALIZING]:
-        rapi.trigger_script_prepare(res.id)
+        await rapi.trigger_script_prepare(res.id)
     elif res.status in [schema.STATUS.WAITING_TO_RUN, schema.STATUS.STARTING, schema.STATUS.RUNNING]:
-        rapi.schedule_script(res.id, res.start_condition)
+        await rapi.schedule_script(res.id, res.start_condition)
 
     log.debug(f'POST /script -> {res=}')
     return res
@@ -346,12 +347,12 @@ def create_script(script: schema.Script) -> schema.Script:
 
 # Get all devices
 @app.get("/device")
-def get_devices() -> list[schema.Device]:
+async def get_devices() -> list[schema.Device]:
     return dbi.get_all(schema.Device)
 
 # Get a specific device by ID
 @app.get("/device/{device_id}")
-def get_device(device_id: str) -> schema.Device:
+async def get_device(device_id: str) -> schema.Device:
     obj = dbi.get(schema.Device, device_id)
     if not obj:
         raise HTTPException(status_code=404, detail="device not found")
@@ -372,12 +373,12 @@ async def create_device(device: schema.Device) -> schema.Device:
 
 # Get all data files
 @app.get("/datafile")
-def get_datafiles():
+async def get_datafiles():
     return dbi.get_all(schema.Device)
 
 # Get a specific data file by ID
 @app.get("/datafile/{datafile_id}")
-def get_datafile(datafile_id: int):  # Assuming ID is an integer for datafiles
+async def get_datafile(datafile_id: int):  # Assuming ID is an integer for datafiles
     obj = dbi.get(schema.Datafile, datafile_id)
     if not obj:
         raise HTTPException(status_code=404, detail="datafile not found")
@@ -385,7 +386,7 @@ def get_datafile(datafile_id: int):  # Assuming ID is an integer for datafiles
 
 # Create a new data file
 @app.post("/datafile")
-def create_datafile(datafile: schema.Datafile):
+async def create_datafile(datafile: schema.Datafile):
     assert datafile.id is None or datafile.id < 1725603466, f'{datafile.id=} are you trying to commit a timestamp to an id?'
     return dbi.commit(datafile)
 
@@ -1124,27 +1125,27 @@ async def action_script_run(request: Request):
     """
 
     kwargs = helpers.split_flat_dict_into_nested(await request.query_params)
-    return _action_script(kwargs, False)
+    return await _action_script(kwargs, False)
 
 
 
 @app.get("/action/script/pre_test")
 async def action_script_pre_test(request: Request):
     kwargs = helpers.split_flat_dict_into_nested(await request.query_params)
-    return _action_script(kwargs, True)
+    return await _action_script(kwargs, True)
 
 
 @app.post("/action/script/pre_test")
 async def action_script_pre_test(request: Request):
     kwargs = helpers.split_flat_dict_into_nested(await request.json())
-    return _action_script(kwargs, True)
+    return await _action_script(kwargs, True)
 
 @app.post("/action/script/run")
 async def action_script_run(request: Request):
     kwargs = helpers.split_flat_dict_into_nested(await request.json())
-    return _action_script(kwargs, False)
+    return await _action_script(kwargs, False)
 
-def _action_script(kwargs, test_only=False):
+async def _action_script(kwargs, test_only=False):
     errormsg = ''
     res = {}
     success = True
@@ -1169,7 +1170,7 @@ def _action_script(kwargs, test_only=False):
 
         if not test_only:    
             res = dbi.commit(schema.Script(**kwargs))
-            rapi.trigger_script_prepare(res.id)
+            await rapi.trigger_script_prepare(res.id)
 
     except Exception as err:
         success = False
@@ -1212,7 +1213,7 @@ def comment_datafile(datafile_id:int, comment_data: dict) -> schema.Datafile:
 
 
 @app.get('/action/script/rerun/{script_id}')  
-def action_script_rerun(script_id:int):
+async def action_script_rerun(script_id:int):
     try:
 
         with dbi.se() as session:
@@ -1231,7 +1232,7 @@ def action_script_rerun(script_id:int):
             obj.errors = ''
             obj.time_started = ''
         
-        rapi.trigger_script_prepare(script_id)
+        await rapi.trigger_script_prepare(script_id)
 
         return dict(command='rerun', id=script_id, success=True, status=obj.status, comments=obj.comments, obj_new = obj, obj_old=obj_old)
     
@@ -1580,7 +1581,7 @@ def limit_number_of_open_feedbacks(n_max = None):
             feedback_answers.pop(oldest_key, None)
 
 
-def _user_feedback_reply(reply:usr.UserFeedbackReply):
+async def _user_feedback_reply(reply:usr.UserFeedbackReply):
 
     global feedback_answers, feedback_requests
 
@@ -1605,7 +1606,7 @@ def _user_feedback_reply(reply:usr.UserFeedbackReply):
 
     if res:
         feedback_answers[reply.id] = input_data
-        rapi.publish_to_channel(redis_interface.channel_user_feedback_reply, input_data)
+        await rapi.publish_to_channel(redis_interface.channel_user_feedback_reply, input_data)
     
     return res, reply, input_data, req
 
@@ -1670,7 +1671,7 @@ async def user_feedback_create(req: usr.UserFeedbackRequest)-> Dict[str, Any]:
     
     limit_number_of_open_feedbacks()
     feedback_requests[id_] = req        
-    rapi.send_user_feedback(req)
+    await rapi.send_user_feedback(req)
     return {'success': True, 'id': req.id, 'request': feedback_requests.get(id_, None)}
 
 
@@ -1745,7 +1746,7 @@ async def userfeedback_event_generator(request: Request, only_running, dummy):
         r = request.app.rapi
         pubsub = request.app.redis_pubsub_usr
         log.info('/userfeedback_events --> starting listening for new events')
-        async for msg_json_string in r.listen_pubsub_async(pubsub, t_sleep=0.1):
+        async for msg_json_string in r.listen_pubsub_async(pubsub):
             log.info('/userfeedback_events --> new event!')
             yield f"data: {msg_json_string}\n\n"  # Format as Server-Sent Event
     except Exception as err:
@@ -1827,7 +1828,7 @@ async def user_feedback_reply(request: Request, files: List[UploadFile] = File(N
     could_parse, errors = reply.parse()
 
     if could_parse and not errors:
-        handled, reply, input_data, req = _user_feedback_reply(reply)
+        handled, reply, input_data, req = await _user_feedback_reply(reply)
         feedback = input_data['feedback_info']
     else:
         feedback = reply.get_feedback_string()
@@ -1875,7 +1876,7 @@ async def mattermost_webhook_post(request: Request):
     # txt = (json.dumps(data, indent=2))
     # log.info(txt)
     
-    text = helpers_mattermost.handle_webhook_request(data, feedback_requests, _user_feedback_reply)
+    text = await helpers_mattermost.handle_webhook_request(data, feedback_requests, _user_feedback_reply)
     ret = {
         "response_type": "comment",
         "username": "Jupy-Runner-" + helpers.get_db_url() + '-' + helpers.get_sys_id(),
