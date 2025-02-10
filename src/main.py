@@ -1765,7 +1765,8 @@ async def websocket_endpoint(websocket: WebSocket, only_running: Optional[int|No
 async def get_script_logs_qry(since: Optional[float|int] = None, only_running: Optional[int|None] = None, dummy: Optional[int] = None) -> list[usr.UserFeedbackRequest]:
             
     current_requests = _get_current_requests_sub(only_running, dummy)
-
+    current_requests = [s for s in current_requests if not isinstance(s, str)]
+    
     if since:
         if not isinstance(since, (int, float)) or since <= 0:
             return JSONResponse(status_code=406, content={"error": f'argument "since" must be either float or int but was {type(since)=} with {since=}'})

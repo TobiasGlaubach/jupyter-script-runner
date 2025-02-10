@@ -75,7 +75,7 @@
         
 
         <h3>User Live Feedback:</h3>
-        <small>(for currently active user feedback) | <a href="/scriptlogs_qry">Click here to show the raw server data</a> | <a href="?dummy=1">Click here to show some dummy requests</a> | <span id="last_tick" style="color: blueviolet;">Connection to Server Pending...</span> <span id="last_tick_ago"></span></small>
+        <small>(for currently active user feedback) <a href="?use_polling=1">Click here to use polling instead of websockets</a> | <a href="/scriptlogs_qry">Click here to show the raw server data</a> | <a href="?dummy=1">Click here to show some dummy requests</a> | <span id="last_tick" style="color: blueviolet;">Connection to Server Pending...</span> <span id="last_tick_ago"></span></small>
         <small>
           <div class="form-check">
             <input type="checkbox" class="form-check-input" id="showRunningScripts">
@@ -99,6 +99,9 @@
 
     const queryParams = new URLSearchParams(window.location.search);
     const dummyParam = queryParams.get('dummy');
+    const useHttpPolling = queryParams.get('use_polling');
+    
+
     const replyUrl = '/user_feedback/replyform'
     const qryUrl = '/scriptlogs_qry'
 
@@ -755,86 +758,139 @@
     }
 
     reload_globals(0);
+    let lastTick = new Date();
 
-    const url = new URL("/userfeedback_events", window.location.origin);
-    var lastTick = new Date();
+    if(!useHttpPolling) {
+        const url = new URL("/userfeedback_events", window.location.origin);
 
-    if (dummyParam) {
-        url.searchParams.append('dummy', 1);
-    }
-
-    if (document.getElementById('showRunningScripts').checked) {
-        url.searchParams.append('only_running', 1);
-    }
-
-    const socket = new WebSocket(url);
-
-    socket.onopen = (event) => {
-        console.log("WebSocket connection opened:", event);
-        document.getElementById('last_tick').innerText = 'WebSocket Connected';
-        document.getElementById('last_tick').style.color = 'green';
-    };
-
-    socket.onmessage = (event) => {
-
-        if (event.data !== 'handshake') {
-            const newMessage = JSON.parse(event.data);
-            console.log("EventSource connection received data", newMessage);
-            handleServerInput(newMessage, true);
-        } else {
-            console.log("EventSource connection received handshake..", event.data);
+        if (dummyParam) {
+            url.searchParams.append('dummy', 1);
         }
-        console.log("WebSocket connection received data", newMessage);
-        handleServerInput(newMessage, true);
+        if (document.getElementById('showRunningScripts').checked) {
+            url.searchParams.append('only_running', 1);
+        }
 
-        lastTick = new Date();
-        const s = lastTick.toISOString().replace('T', ' ').split('.')[0] + ' (UTC)';
-        document.getElementById('last_tick').innerText = `WebSocket Connected | Last Tick: ${s}`;
-    };
+        const socket = new WebSocket(url);
 
-    socket.onerror = (error) => {
-        console.error("WebSocket failed:", error);
-        const txt = "WebSocket failed:" + error;
-        const s = lastTick.toISOString().replace('T', ' ').split('.')[0] + ' (UTC)';
-        document.getElementById('last_tick').innerText = `${txt} | Last Tick: ${s}`;
-        document.getElementById('last_tick').style.color = 'red';
-        socket.close(); // Close the connection if an error occurs
-    };
+        socket.onopen = (event) => {
+            console.log("WebSocket connection opened:", event);
+            document.getElementById('last_tick').innerText = 'WebSocket Connected';
+            document.getElementById('last_tick').style.color = 'green';
+        };
 
-    socket.onclose = (event) => {
-        lastTick = new Date();
-        const s = lastTick.toISOString().replace('T', ' ').split('.')[0] + ' (UTC)';
-        
+        socket.onmessage = (event) => {
 
-        if (event.wasClean) {
-            const str = `WebSocket connection closed cleanly, code=${event.code}, reason=${event.reason} | Last Tick: ${s}`;
-            console.log(str);
-            document.getElementById('last_tick').innerText = str;
-            document.getElementById('last_tick').style.color = 'black';
+            if (event.data !== 'handshake') {
+                const newMessage = JSON.parse(event.data);
+                console.log("EventSource connection received data", newMessage);
+                handleServerInput(newMessage, true);
+            } else {
+                console.log("WebSocket connection received handshake..", event.data);
+            }
+            lastTick = new Date();
+            const s = lastTick.toISOString().replace('T', ' ').split('.')[0] + ' (UTC)';
+            document.getElementById('last_tick').innerText = `WebSocket Connected | Last Tick: ${s}`;
+        };
 
-        } else {
-            const str = 'WebSocket connection died';
-            console.error(str);
-            document.getElementById('last_tick').innerText = str;
+        socket.onerror = (error) => {
+            console.error("WebSocket failed:", error);
+            const txt = "WebSocket failed:" + error;
+            const s = lastTick.toISOString().replace('T', ' ').split('.')[0] + ' (UTC)';
+            document.getElementById('last_tick').innerText = `${txt} | Last Tick: ${s}`;
             document.getElementById('last_tick').style.color = 'red';
+            socket.close(); // Close the connection if an error occurs
+        };
 
-        }
-    };
-
-    setInterval(function () {
-        try {
-            const now = new Date();
-            document.getElementById('last_tick_ago').innerText = ' | ' + formatTimeDiff(now - lastTick);
+        socket.onclose = (event) => {
+            lastTick = new Date();
+            const s = lastTick.toISOString().replace('T', ' ').split('.')[0] + ' (UTC)';
             
-            const dtElements = document.querySelectorAll('.dt-info');
-            dtElements.forEach(dtElement => {
-                const timestamp = parseInt(dtElement.dataset.timestamp) * 1000;
-                dtElement.innerText = formatTimeDiff(now - timestamp);
-            });
-        } catch (error) {
-            console.error(error)
+
+            if (event.wasClean) {
+                const str = `WebSocket connection closed cleanly, code=${event.code}, reason=${event.reason} | Last Tick: ${s}`;
+                console.log(str);
+                document.getElementById('last_tick').innerText = str;
+                document.getElementById('last_tick').style.color = 'black';
+
+            } else {
+                const str = 'WebSocket connection died';
+                console.error(str);
+                document.getElementById('last_tick').innerText = str;
+                document.getElementById('last_tick').style.color = 'red';
+
+            }
+        };
+
+            
+        setInterval(function () {
+            try {
+                const now = new Date();
+                document.getElementById('last_tick_ago').innerText = ' | ' + formatTimeDiff(now - lastTick);
+                
+                const dtElements = document.querySelectorAll('.dt-info');
+                dtElements.forEach(dtElement => {
+                    const timestamp = parseInt(dtElement.dataset.timestamp) * 1000;
+                    dtElement.innerText = formatTimeDiff(now - timestamp);
+                });
+            } catch (error) {
+                console.error(error)
+            }
+        }, 200);
+        
+    } else {
+            
+
+
+        let since = null;
+
+        function fetchScriptLogs() {
+            const url = new URL(qryUrl, window.location.origin);
+            if (since !== null) {
+                url.searchParams.append('since', since);            
+            }
+            if (dummyParam) {
+                url.searchParams.append('dummy', 1);
+            }
+            if (document.getElementById('showRunningScripts').checked) {
+                url.searchParams.append('only_running', 1);
+            }            
+            fetch(url)
+                .then(response => response.json())
+                .then(data => {
+                    console.log(data);
+                    let t = -1.0;
+                    let maxIndex = -1;
+                    for (let i = 0; i < data.length; i++) {
+                        if (data[i].timestamp && data[i].timestamp > t) {
+                            t = data[i].timestamp;
+                            maxIndex = i;
+                        }
+                    }
+                    
+                    for (let i = 0; i < data.length; i++) {
+                        handleServerInput(data[i], maxIndex===i);
+                    }               
+                    if (t > 0 ) { since = t; }
+                })
+                .catch(error => console.error(error));
+                lastTick = new Date();
+
+            
+            s = lastTick.toISOString().replace('T', ' ').split('.')[0] + ' (UTC)';
+            document.getElementById('last_tick').innerText = `Last Tick: ${s}`;
+            document.getElementById('last_tick_ago').innerText = formatTimeDiff(new Date() - lastTick);
+
+            if (document.getElementById('request_list').childElementCount === 0) {
+                document.getElementById('feedback').innerHTML = '<hr><strong>-- Nothing to Show--</strong>';
+            } else {
+                document.getElementById('feedback').innerHTML = '';
+            }
         }
-    }, 200);
+        fetchScriptLogs();
+        setInterval(fetchScriptLogs, 2000);
+        
+    }
+
 
 </script>
 
