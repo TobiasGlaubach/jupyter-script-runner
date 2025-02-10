@@ -14,7 +14,7 @@ services:
       - ${DATA_BASE_PATH}/db:/home/jovyan/db:rw"
       - ${DATA_BASE_PATH}/shared:/home/jovyan/shared:rw"
     ports:
-      - "7990:8080"
+      - "7990:8000"
     depends_on:
       - redis
     networks:
