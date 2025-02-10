@@ -762,13 +762,21 @@
     if (dummyParam) {
         url.searchParams.append('dummy', 1);
     }
+
     if (document.getElementById('showRunningScripts').checked) {
         url.searchParams.append('only_running', 1);
-    }            
+    }
 
-    const eventSource = new EventSource(url);
-    eventSource.onmessage = (event) => {
-        
+    const socket = new WebSocket(url);
+
+    socket.onopen = (event) => {
+        console.log("WebSocket connection opened:", event);
+        document.getElementById('last_tick').innerText = 'WebSocket Connected';
+        document.getElementById('last_tick').style.color = 'green';
+    };
+
+    socket.onmessage = (event) => {
+
         if (event.data !== 'handshake') {
             const newMessage = JSON.parse(event.data);
             console.log("EventSource connection received data", newMessage);
@@ -776,28 +784,43 @@
         } else {
             console.log("EventSource connection received handshake..", event.data);
         }
+        console.log("WebSocket connection received data", newMessage);
+        handleServerInput(newMessage, true);
 
         lastTick = new Date();
         const s = lastTick.toISOString().replace('T', ' ').split('.')[0] + ' (UTC)';
-        document.getElementById('last_tick').innerText = `Event Source Connected | Last Tick: ${s}`;
-        document.getElementById('last_tick').style.color = 'green';
+        document.getElementById('last_tick').innerText = `WebSocket Connected | Last Tick: ${s}`;
     };
 
-    eventSource.onerror = (error) => {
-        console.error("EventSource failed:", error);
-        const txt = "EventSource failed:" + error;
+    socket.onerror = (error) => {
+        console.error("WebSocket failed:", error);
+        const txt = "WebSocket failed:" + error;
         const s = lastTick.toISOString().replace('T', ' ').split('.')[0] + ' (UTC)';
         document.getElementById('last_tick').innerText = `${txt} | Last Tick: ${s}`;
         document.getElementById('last_tick').style.color = 'red';
-        eventSource.close(); // Close the connection if an error occurs
+        socket.close(); // Close the connection if an error occurs
     };
 
-    eventSource.onopen = () => {
-        console.log("Event Source Connected");
-        document.getElementById('last_tick').innerText = 'Event Source Connected';
-        document.getElementById('last_tick').style.color = 'green';
-    };    
-    
+    socket.onclose = (event) => {
+        lastTick = new Date();
+        const s = lastTick.toISOString().replace('T', ' ').split('.')[0] + ' (UTC)';
+        
+
+        if (event.wasClean) {
+            const str = `WebSocket connection closed cleanly, code=${event.code}, reason=${event.reason} | Last Tick: ${s}`;
+            console.log(str);
+            document.getElementById('last_tick').innerText = str;
+            document.getElementById('last_tick').style.color = 'black';
+
+        } else {
+            const str = 'WebSocket connection died';
+            console.error(str);
+            document.getElementById('last_tick').innerText = str;
+            document.getElementById('last_tick').style.color = 'red';
+
+        }
+    };
+
     setInterval(function () {
         try {
             const now = new Date();

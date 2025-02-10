@@ -24,7 +24,6 @@ from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.responses import FileResponse
-from sse_starlette.sse import EventSourceResponse
 
 from pydantic import BaseModel, Field
 from jinja2 import Environment, FileSystemLoader
@@ -1700,7 +1699,7 @@ async def user_feedback_check(id = Query(description='The id of the request to w
         return {'request': feedback_requests.get(id), 'answer': feedback_answers.pop(id)}
     
 
-async def userfeedback_event_generator(request: Request, only_running, dummy):
+def _get_current_requests_sub(only_running, dummy):
 
     # Generate some dummy data
     global feedback_requests, feedback_answers
@@ -1731,74 +1730,41 @@ async def userfeedback_event_generator(request: Request, only_running, dummy):
             current_requests = [r for r in current_requests if any((r.match_script(s) for s in res))]
             
     current_requests = [r.update_state() for r in current_requests]
+    return current_requests
 
+async def userfeedback_event_generator(only_running, dummy):
+    current_requests = _get_current_requests_sub(only_running, dummy)
 
     # previous data
     for msg_instance in current_requests:
-        msg_json_string = msg_instance.model_dump_json()
-        yield f"data: {msg_json_string}\n\n"  # Format as Server-Sent Event
+        yield msg_instance if isinstance(msg_instance, str) else msg_instance.model_dump_json()
 
-    async with request.app.rapi.r.pubsub() as pubsub:
+    async with rapi.r.pubsub() as pubsub:
         await pubsub.subscribe(redis_interface.channel_user_feedback_new)
         while True:
             message = await pubsub.get_message(ignore_subscribe_messages = True)
             if message:
                 data = message['data'].decode("utf-8")
                 log.info('pubsub_reader new event! "' + helpers.limit_len(data) + '"')
-                yield f'event: message\ndata: {str(data)}\n\n'
+                yield str(data)
             else:
                 await asyncio.sleep(0.1)
 
+@app.websocket("/userfeedback_events")
+async def websocket_endpoint(websocket: WebSocket, only_running: Optional[int|None] = None, dummy: Optional[int] = None):
+    await websocket.accept()
+    async for data_str in userfeedback_event_generator(only_running, dummy):
+        await websocket.send_text(data_str)
 
-@app.get("/userfeedback_events")
-async def events_endpoint(request: Request, only_running: Optional[int|None] = None, dummy: Optional[int] = None):
-    try:
-        return EventSourceResponse(userfeedback_event_generator(request, only_running, dummy), media_type='text/event-stream')
-    
-        # return StreamingResponse(userfeedback_event_generator(request, only_running, dummy), 
-        #                          media_type="text/event-stream",
-        #                          headers = {
-        #                              "Content-Encoding": "none" # This is crucial for the frontend to work
-        #                          })
-    
-    except Exception as err:
-        log.error(err)
-        traceback.format_exc()
-        raise
+
 
 
 
 
 @app.get("/scriptlogs_qry")
 async def get_script_logs_qry(since: Optional[float|int] = None, only_running: Optional[int|None] = None, dummy: Optional[int] = None) -> list[usr.UserFeedbackRequest]:
-    
-    # Generate some dummy data
-    global feedback_requests, feedback_answers
-    log.debug(f'scriptlogs_qry?{since=}&{dummy=}')
-
-    if dummy:
-        t = 1738700000
-        script = dbi.get(schema.Script, 1)
-        if not script is None:
-            script_uid = os.path.basename(script.script_out_path)
-            script_id = 1
-            device_id = script.device_id
-        else:
-            script_uid = ''
-            script_id = 0
-            device_id = 'no_device'
-
-        dummy = lambda x: usr.UserFeedbackRequest(message=f'Dummy Request for {x}  '*10, request_type=x, id=helpers.get_uid(), script_id=script_id, script_uid=script_uid, device_id=device_id, timestamp=t)
-        allowed = 'confirm file files picture pictures text int float info info info'.split()
-        current_requests = [dummy(x) for x in allowed]
-    
-    else:            
-        current_requests = list(feedback_requests.values())
-        if only_running or only_running is None and len(current_requests) > 100:
-            stati = [s for s in schema.STATUS if not s in [schema.STATUS.FAILED, schema.STATUS.CANCELLED, schema.STATUS.ABORTED, schema.STATUS.FAULTY, schema.STATUS.FINISHED]]
-            res = dbi.qry_scripts(stati=stati)
-            current_requests = [r for r in current_requests if any((r.match_script(s) for s in res))]
             
+    current_requests = _get_current_requests_sub(only_running, dummy)
 
     if since:
         if not isinstance(since, (int, float)) or since <= 0:

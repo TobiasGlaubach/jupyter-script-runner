@@ -42,7 +42,7 @@ procserver:
 
   run_script_path: run_script.py
   pythonpath_for_win: 'python'
-  user_info_verbosity: 2 # 0=no user info, 1=only text, 2=text and markdown
+  user_info_verbosity: 1 # 0=no user info, 1=only text, 2=text and markdown
   
   timeout_redis: 0.1  # timeout on redis calls (this will make redis checks effectively non blocking)
   t_interval: 30
