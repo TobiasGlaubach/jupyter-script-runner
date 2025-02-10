@@ -48,8 +48,3 @@ procserver:
   t_interval: 30
   t_info: 360         # reporting period
   t_sleep: 0.5        # period between checks on redis 
-
-
-redis: 
-  host: 'redis'
-  port: 6379

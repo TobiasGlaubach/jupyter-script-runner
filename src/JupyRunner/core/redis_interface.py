@@ -16,9 +16,7 @@ if __name__ == '__main__':
 
 from JupyRunner.core import helpers
 
-config = helpers.load_config()
-if not config:
-    config = {}
+
     
 channel_script_prepare = "script_prepare"
 channel_script_start = "script_start"
@@ -38,9 +36,9 @@ def _get_messages(pubsub, timeout):
 class RedisApi(object):
     def __init__(self, host=None, port = None) -> None:
         if host is None:
-            host = str(config.get('redis', {}).get('host', "redis"))
+            host = "redis"
         if port is None:
-            port = int(config.get('redis', {}).get('port', 6379))
+            port = 6379
             
 
         self.r = redis.Redis(host=host, port=port)
@@ -197,9 +195,9 @@ class RedisApi(object):
 class AsyncRedisApi(object):
     def __init__(self, host=None, port=None) -> None:
         if host is None:
-            host = str(config.get('redis', {}).get('host', "redis"))
+            host = "redis"
         if port is None:
-            port = int(config.get('redis', {}).get('port', 6379))
+            port = 6379
 
         self.r = aredis.Redis(host=host, port=port)
 
