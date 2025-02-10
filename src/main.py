@@ -82,19 +82,20 @@ helpers.logging.getLogger('sqlalchemy.orm').setLevel(helpers.logging.WARNING)
 
 log.info('STARTED!')
 
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global rapi
     # Startup: Initialize Redis Pub/Sub
     app.rapi = rapi = redis_interface.AsyncRedisApi()
-    app.redis_pubsub_usr = app.rapi.r.pubsub()
-    await app.redis_pubsub_usr.subscribe(redis_interface.channel_user_feedback_new)
+    # app.redis_pubsub_usr = app.rapi.r.pubsub()
 
     yield  # This yields control to the app
 
-    # Shutdown: Close Redis connection
-    await app.redis_pubsub_usr.unsubscribe(redis_interface.channel_user_feedback_new)
-    await app.redis_pubsub_usr.close()
+    # # Shutdown: Close Redis connection
+    # await app.redis_pubsub_usr.unsubscribe(redis_interface.channel_user_feedback_new)
+    # await app.redis_pubsub_usr.close()
 
 
 
@@ -114,21 +115,15 @@ feedback_requests = {}
 feedback_answers = {}
 
 
-# Store connected websockets
-connected_websockets = set()
+# @app.middleware("http")
+# async def log_requests(request: Request, call_next: Callable) -> Response:
+#     log.debug(f"Received request: {request.method} {request.url}")
 
+#     response = await call_next(request)
 
+#     log.debug(f"Sent response: {response.status_code} {response.headers}")
 
-
-@app.middleware("http")
-async def log_requests(request: Request, call_next: Callable) -> Response:
-    log.debug(f"Received request: {request.method} {request.url}")
-
-    response = await call_next(request)
-
-    log.debug(f"Sent response: {response.status_code} {response.headers}")
-
-    return response
+#     return response
 
 
 def get_session():
@@ -156,14 +151,14 @@ def make_datafile_source_url(script:schema.Script, filename):
 @app.get("/ui")
 async def ui0(request: Request):
     template = templates.get_template(f'pg_home.html')
-    context = {"url_for": request.url_for, "jupyter_url": jupyter_url}
+    context = {"url_for": request.url_for, "jupyter_url": jupyter_url, 'debug': True if request.query_params.get("debug") else False}
     rendered_html = template.render(context)
     return HTMLResponse(status_code=200, content=rendered_html)
 
 @app.get("/ui/{page}")
 async def ui(page:str, request: Request):
     template = templates.get_template(f'pg_{page}.html')
-    context = {"url_for": request.url_for, "jupyter_url": jupyter_url}
+    context = {"url_for": request.url_for, "jupyter_url": jupyter_url, 'debug': True if request.query_params.get("debug") else False}
     rendered_html = template.render(context)
     return HTMLResponse(status_code=200, content=rendered_html)
 
@@ -1670,7 +1665,10 @@ async def user_feedback_create(req: usr.UserFeedbackRequest)-> Dict[str, Any]:
         log.error(err)
     
     limit_number_of_open_feedbacks()
+    req.update_state()
     feedback_requests[id_] = req        
+    
+    #print(req.id, req.script_state)
     await rapi.send_user_feedback(req)
     return {'success': True, 'id': req.id, 'request': feedback_requests.get(id_, None)}
 
@@ -1706,6 +1704,8 @@ async def userfeedback_event_generator(request: Request, only_running, dummy):
     # Generate some dummy data
     global feedback_requests, feedback_answers
     log.debug(f'userfeedback_event_generator?{dummy=}')
+    
+    yield f"data: handshake\n\n"  # Format as Server-Sent Event
 
     if dummy:
         t = 1738700000
@@ -1737,24 +1737,31 @@ async def userfeedback_event_generator(request: Request, only_running, dummy):
         msg_json_string = msg_instance.model_dump_json()
         yield f"data: {msg_json_string}\n\n"  # Format as Server-Sent Event
 
-    # async listen for new data
-    r = request.app.rapi
-    pubsub = request.app.redis_pubsub_usr
-    log.info('/userfeedback_events --> starting listening for new events')
-    async for msg_json_string in r.listen_pubsub_async(pubsub):
-        log.info('/userfeedback_events --> new event!')
-        yield f"data: {msg_json_string}\n\n"  # Format as Server-Sent Event
+    async with request.app.rapi.r.pubsub() as pubsub:
+        await pubsub.subscribe(redis_interface.channel_user_feedback_new)
+        while True:
+            message = await pubsub.get_message(ignore_subscribe_messages = True)
+            if message:
+                data = message['data'].decode("utf-8")
+                log.info('pubsub_reader new event! "' + helpers.limit_len(data) + '"')
+                yield f'event: message\ndata: {str(data)}\n\n'
+            else:
+                await asyncio.sleep(0.1)
 
 
 @app.get("/userfeedback_events")
 async def events_endpoint(request: Request, only_running: Optional[int|None] = None, dummy: Optional[int] = None):
     try:
-        return StreamingResponse(userfeedback_event_generator(request, only_running, dummy), media_type="text/event-stream")    
+        return StreamingResponse(userfeedback_event_generator(request, only_running, dummy), 
+                                 media_type="text/event-stream",
+                                 headers = {
+                                     "Content-Encoding": "none" # This is crucial for the frontend to work
+                                 })
+    
     except Exception as err:
         log.error(err)
         traceback.format_exc()
         raise
-    
 
 
 

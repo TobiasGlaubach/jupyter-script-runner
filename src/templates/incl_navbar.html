@@ -9,32 +9,49 @@
             <li class="nav-item">
                 <a class="nav-link active" aria-current="page" href="/ui">Home</a>
             </li>
+            
+            {% if debug %}
             <li class="nav-item">
                 <a class="nav-link" aria-current="page" href="/ui/files">Filebrowser</a>
             </li>
+            {% endif %}
+
             <li class="nav-item">
                 <a class="nav-link" href="/ui/run">Run</a>
             </li>
             <li class="nav-item">
             <a class="nav-link" href="/ui/table">Table</a>
             </li>
+            
+            {% if debug %}
             <li class="nav-item">
                 <a class="nav-link" href="/ui/plot">Datafiles</a>
             </li>
+            {% endif %}
+
             <li class="nav-item">
                 <a class="nav-link" href="/ui/devices">Devices</a>
-                </li>
+            </li>
+
+            {% if debug %}
             <li class="nav-item">
                 <a class="nav-link" href="/ui/upload">Manual File Upload</a>
             </li>
+            {% endif %}
+
             <li class="nav-item">
                 <a class="nav-link" href="/ui/edit">Edit</a>
             </li>
-            <!-- <li class="nav-item">
-                <a class="nav-link" href="/ui/chat">User Live Feedback</a>
-            </li> -->
+
+            {% if debug %}
             <li class="nav-item">
-                <a class="nav-link" href="/ui/scriptinfo">User Live Feedback</a>
+                <a class="nav-link" href="/ui/chat">Chat</a>
+            </li>
+            {% endif %}
+
+
+            <li class="nav-item">
+                <a class="nav-link" href="/ui/scriptinfo">Live Feedback</a>
             </li>
             <li class="nav-item">
                 <a class="nav-link" href="{{ jupyter_url }}" style="color: #007bff; text-decoration: none;">Jupyter</a>

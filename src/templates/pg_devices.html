@@ -74,20 +74,23 @@ function createListItem(data) {
     item.appendChild(ul);
   }
 
-  
-  copyJsonBtn = document.createElement('button');
-  copyJsonBtn.classList = ['btn', 'btn-danger'];
+    
+    copyJsonBtn = document.createElement('button');
+    copyJsonBtn.className = 'btn btn-secondary';
 
     copyJsonBtn.innerText = 'Copy to Clipboard as JSON';
     copyJsonBtn.addEventListener('click', () => {
+
     const jsonStr = JSON.stringify(data, null, 2);
 
     navigator.clipboard.writeText(jsonStr)
         .then(() => {
-        console.log('JSON copied to clipboard');
+            const tmp = jsonStr.length > 20 ? (jsonStr.substring(0, 20) + '...') : jsonStr;
+            alert('JSON copied to clipboard:\n' + tmp);
         })
         .catch((err) => {
-        console.error('Error copying JSON to clipboard:', err);
+            console.error('Error copying JSON to clipboard:', err);
+            alert('Error copying JSON to clipboard:' + err)
         });
     });
   item.appendChild(copyJsonBtn);

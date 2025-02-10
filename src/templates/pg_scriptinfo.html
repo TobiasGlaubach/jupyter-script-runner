@@ -71,10 +71,11 @@
 
     </div>
 
+
         
 
         <h3>User Live Feedback:</h3>
-        <small>(for currently active user feedback) | <a href="/scriptlogs_qry">Click here to show the raw server data</a> | <a href="?dummy=1">Click here to show some dummy requests</a> | <span id="last_tick"></span> <span id="last_tick_ago"></span></small>
+        <small>(for currently active user feedback) | <a href="/scriptlogs_qry">Click here to show the raw server data</a> | <a href="?dummy=1">Click here to show some dummy requests</a> | <span id="last_tick" style="color: blueviolet;">Connection to Server Pending...</span> <span id="last_tick_ago"></span></small>
         <small>
           <div class="form-check">
             <input type="checkbox" class="form-check-input" id="showRunningScripts">
@@ -183,34 +184,6 @@
     }
 
 
-    
-    function showScriptCard(scriptInfo, doShow) {
-        try {
-            var request_list = document.getElementById('request_list');
-            
-            if(!scriptInfo || scriptInfo.length < 1 || isEmpty(scriptInfo)){
-                return;
-            }
-            const accordionItems = request_list.querySelectorAll('.accordion-item');
-            accordionItems.forEach(item => {
-                const collapseElement = item.querySelector('.collapse');
-                if (collapseElement.classList.contains('show')) {
-                    collapseElement.classList.remove('show');
-                }
-            });
-            const cardUId = getScriptUid(scriptInfo);
-            
-            const collapseElement = document.getElementById(`${cardUId}_content_div`);
-            if (collapseElement.classList.contains('show')) {
-                collapseElement.classList.remove('show');
-            }
-        } catch (error) {
-            console.error('ERROR in showScriptCard');
-            console.error(error);
-        }
-
-    }
-
     function makeScriptCard(scriptInfo, doShow) {
         
         var request_list = document.getElementById('request_list');
@@ -249,13 +222,13 @@
 
         card.innerHTML = `<div class="card-header" id="${cardUId}_heading">
       <h2 class="mb-0">
-        <button class="btn btn-link btn-block text-left collapsed" type="button" data-toggle="collapse" data-target="#${cardUId}_content_div" aria-expanded="true" aria-controls="collapseOne">
-            <span><b>${tp2} with ${tp}:</b>: ${cardUId}${status}<strong> status=</strong><strong id="${cardUId}_status">"${scriptInfo.script_status}"</strong> <span id="${cardUId}_lastreq_info"></span></span>
+        <button class="btn btn-link btn-block text-left collapsed my-collapser" type="button" data-toggle="collapse" data-target="#${cardUId}_content_div" aria-expanded="true" aria-controls="collapseOne">
+            <span><b>${tp2} with ${tp}:</b>: ${cardUId}${status}<strong> status=</strong><strong id="${cardUId}_status">"${scriptInfo.script_status}"</strong> <span id="${cardUId}_lastreq_info" style="color:black;"></span> <span class="dt-info" id="${cardUId}_dt_info" style="color:black;"></span></span>
         </button>
       </h2>
     </div>
 
-    <div id="${cardUId}_content_div" class="collapse${s}" aria-labelledby="${cardUId}_heading" data-parent="#request_list">
+    <div id="${cardUId}_content_div" class="my-collapsible collapse${s}" aria-labelledby="${cardUId}_heading" data-parent="#request_list">
       <div class="card-body">
         <div id="container">
             ${content}
@@ -271,34 +244,29 @@
         return cardUId;
     }
     
-    function handleServerInput(data, isNewest) {
+    function handleServerInput(scriptInfo, isNewest) {
         
-        const scriptUid = getScriptUid(data);
+        const scriptUid = getScriptUid(scriptInfo);
         const el = document.getElementById(`${scriptUid}_logs`);
-        console.log(data, el);
+
         if (!el) {
-            if(isNewest) {
-                var request_list = document.getElementById('request_list');
-                const accordionItems = request_list.querySelectorAll('.accordion-item');
-                accordionItems.forEach(item => {
-                    const collapseElement = item.querySelector('.collapse');
-                    if (collapseElement.classList.contains('show')) {
-                        collapseElement.classList.remove('show');
-                    }
-                });
-            }
-            makeScriptCard(data, isNewest);
-        }  else if (isNewest) {
-            showScriptCard(data, isNewest);
+            makeScriptCard(scriptInfo, isNewest);
+        }
+
+        if (isNewest) {
+            const cardUId = getScriptUid(scriptInfo);
+            $(".my-collapsible").each(function(index, element) {
+                $(element).collapse(element.id === `${cardUId}_content_div` ? 'show' : 'hide' );
+            });
         }
         
         const statusEl = document.getElementById(`${scriptUid}_status`);
-        if (data.hasOwnProperty("script_state") && !isEmpty(data.script_state)) {
+        if (scriptInfo.hasOwnProperty("script_state") && !isEmpty(scriptInfo.script_state)) {
             
-            statusEl.innerText = data.script_state;
-            if ("FAILED CANCELLED STATUS.ABORTED FAULTY".split(' ').includes(data.script_state)) {
+            statusEl.innerText = scriptInfo.script_state;
+            if ("FAILED CANCELLED STATUS.ABORTED FAULTY".split(' ').includes(scriptInfo.script_state)) {
                 statusEl.style.color = 'red';
-            } else if (data.script_state == "FINISHED") {
+            } else if (scriptInfo.script_state == "FINISHED") {
                 statusEl.style.color = 'green';
             } else {
                 statusEl.style.color = 'blue';
@@ -311,17 +279,20 @@
 
         const logs = document.getElementById(`${scriptUid}_logs`);
         if (logs) {
-            if (data.request_type === 'info' || data.handled === 1) {
-                logs.appendChild(createInfoLog(data));
+            if (scriptInfo.request_type === 'info' || scriptInfo.handled === 1) {
+                logs.appendChild(createInfoLog(scriptInfo));
                 logs.scrollTop = logs.scrollHeight;
             } else {
-                logs.appendChild(createForm(data));
+                logs.appendChild(createForm(scriptInfo));
                 logs.scrollTop = logs.scrollHeight;
             }
 
             const lastReq = document.getElementById(`${scriptUid}_lastreq_info`);
-            const txt = data.message.length > 30 ? (data.message.substring(0, 30) + '...') : data.message;
-            lastReq.innerText = `Last Request: "${data.request_type}" request with Prompt: "${txt}"`;
+            const txt = scriptInfo.message.length > 30 ? (scriptInfo.message.substring(0, 30) + '...') : scriptInfo.message;
+            lastReq.innerText = `Last Request: "${scriptInfo.request_type}" request with Prompt: "${txt}"`;
+
+            const dtreq = document.getElementById(`${scriptUid}_dt_info`);
+            dtreq.dataset.timestamp = scriptInfo.timestamp;
         }
 
     }
@@ -783,9 +754,6 @@
         URL.revokeObjectURL(url);
     }
 
-        
-
-    
     reload_globals(0);
 
     const url = new URL("/userfeedback_events", window.location.origin);
@@ -800,17 +768,19 @@
 
     const eventSource = new EventSource(url);
     eventSource.onmessage = (event) => {
-        console.log("EventSource connection received data", event);
-        const newMessage = JSON.parse(event.data);
-        handleServerInput(newMessage, true);
+        
+        if (event.data !== 'handshake') {
+            const newMessage = JSON.parse(event.data);
+            console.log("EventSource connection received data", newMessage);
+            handleServerInput(newMessage, true);
+        } else {
+            console.log("EventSource connection received handshake..", event.data);
+        }
 
         lastTick = new Date();
         const s = lastTick.toISOString().replace('T', ' ').split('.')[0] + ' (UTC)';
         document.getElementById('last_tick').innerText = `Event Source Connected | Last Tick: ${s}`;
         document.getElementById('last_tick').style.color = 'green';
-        // const messageDiv = document.createElement("div");
-        // messageDiv.textContent = newMessage.message;
-        // document.getElementById("errorMessage").appendChild(messageDiv);
     };
 
     eventSource.onerror = (error) => {
@@ -822,7 +792,6 @@
         eventSource.close(); // Close the connection if an error occurs
     };
 
-    // Optional: Handle the open event
     eventSource.onopen = () => {
         console.log("Event Source Connected");
         document.getElementById('last_tick').innerText = 'Event Source Connected';
@@ -830,11 +799,19 @@
     };    
     
     setInterval(function () {
-        document.getElementById('last_tick_ago').innerText = ' | ' + formatTimeDiff(new Date() - lastTick);
-    }, 100);
-    
-
-    //fetchRequest();
+        try {
+            const now = new Date();
+            document.getElementById('last_tick_ago').innerText = ' | ' + formatTimeDiff(now - lastTick);
+            
+            const dtElements = document.querySelectorAll('.dt-info');
+            dtElements.forEach(dtElement => {
+                const timestamp = parseInt(dtElement.dataset.timestamp) * 1000;
+                dtElement.innerText = formatTimeDiff(now - timestamp);
+            });
+        } catch (error) {
+            console.error(error)
+        }
+    }, 200);
 
 </script>
 

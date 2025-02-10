@@ -265,7 +265,16 @@ def get_db_url(with_port = True, with_http=True, use_cache=True, config = None):
     return url
 
 def get_jupyter_url(use_cache=True, config = None):
+    url = os.environ.get('JUPYTER_URL', config.get('globals', {}).get('dbserver_uri', ''))
+    if url and is_valid_url(url):
+        return url 
+    
     url = get_db_url(with_port=False, with_http=True, use_cache=use_cache, config=config)
+    if url:
+        url = ':'.join(url.split(':')[:-1])
+    else:
+        url = get_primary_ip(use_cache=use_cache)
+        
     port = str(config.get('globals', {}).get('default_port_jupyter', '7991'))
     url = f'{url}:{port}/lab?'
     return url
