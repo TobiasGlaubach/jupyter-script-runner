@@ -1,4 +1,4 @@
-__version__ = '1.6.5'
+__version__ = '1.6.6'
 
 from JupyRunner.client import api_accessor as api
 from JupyRunner.client.api_accessor import ServerApi

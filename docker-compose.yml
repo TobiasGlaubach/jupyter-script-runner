@@ -14,12 +14,11 @@ services:
       - ${DATA_BASE_PATH}/db:/home/jovyan/db:rw"
       - ${DATA_BASE_PATH}/shared:/home/jovyan/shared:rw"
     ports:
-      - "7990:8000"
+      - "7990:8080"
     depends_on:
       - redis
     networks:
       - mynetwork
-
     command: fastapi run main.py --port 8080
     
   jupyrun_proc:
