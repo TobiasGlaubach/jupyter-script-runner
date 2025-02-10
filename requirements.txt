@@ -43,4 +43,4 @@ pandas
 
 redis
 
-starlette<0.39.0,>=0.37.2
+sse-starlette<0.39.0,>=0.37.2
