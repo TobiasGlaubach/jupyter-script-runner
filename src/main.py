@@ -1740,15 +1740,15 @@ async def userfeedback_event_generator(request: Request, only_running, dummy):
         traceback.print_exc()
     
 
-    try:
-        # async listen for new data
-        r = request.app.rapi
-        pubsub = request.app.redis_pubsub_usr
-        async for msg_json_string in r.listen_pubsub_async(pubsub, t_sleep=0.1):
-            yield f"data: {msg_json_string}\n\n"  # Format as Server-Sent Event
-    except Exception as err:
-        log.error(err)
-        traceback.print_exc()
+    # try:
+    #     # async listen for new data
+    #     r = request.app.rapi
+    #     pubsub = request.app.redis_pubsub_usr
+    #     async for msg_json_string in r.listen_pubsub_async(pubsub, t_sleep=0.1):
+    #         yield f"data: {msg_json_string}\n\n"  # Format as Server-Sent Event
+    # except Exception as err:
+    #     log.error(err)
+    #     traceback.print_exc()
 
 
 @app.get("/userfeedback_events")
@@ -1870,13 +1870,13 @@ async def mattermost_webhook_post(request: Request):
         log.warning(f'Unauthorized request from {client_host}')
         return JSONResponse(status_code=401, content={"message": "Unauthorized"})
     
-    txt = (json.dumps(data, indent=2))
-    log.info(txt)
+    # txt = (json.dumps(data, indent=2))
+    # log.info(txt)
     
     text = helpers_mattermost.handle_webhook_request(data, feedback_requests, _user_feedback_reply)
     ret = {
         "response_type": "comment",
-        "username": "Jupy-Runner-" + helpers.get_primary_ip() + '-' + helpers.get_sys_id(),
+        "username": "Jupy-Runner-" + helpers.get_db_url() + '-' + helpers.get_sys_id(),
         "text": text,
         "props": data, 
     }   
