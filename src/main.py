@@ -24,6 +24,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.responses import FileResponse
+# from sse_starlette.sse import EventSourceResponse
 
 from pydantic import BaseModel, Field
 from jinja2 import Environment, FileSystemLoader
@@ -1752,6 +1753,8 @@ async def userfeedback_event_generator(request: Request, only_running, dummy):
 @app.get("/userfeedback_events")
 async def events_endpoint(request: Request, only_running: Optional[int|None] = None, dummy: Optional[int] = None):
     try:
+        # return EventSourceResponse(userfeedback_event_generator(request, only_running, dummy), media_type='text/event-stream')
+    
         return StreamingResponse(userfeedback_event_generator(request, only_running, dummy), 
                                  media_type="text/event-stream",
                                  headers = {

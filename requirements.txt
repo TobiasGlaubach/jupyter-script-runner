@@ -1,16 +1,21 @@
 future 
 
-fastapi[standard]
-python-multipart
+pydantic==2.8.2
+pydantic_core==2.20.1
 
-sqlmodel
-sqlalchemy
-sqlite-utils
+fastapi==0.112.1
+fastapi-cli==0.0.5
+fastjsonschema==2.20.0
+
+python-multipart==0.0.9
+
+sqlmodel==0.0.21
+SQLAlchemy==2.0.32
+sqlite-utils==3.37
 
 python-dateutil==2.8.2
 
 requests
-papermill
 
 python-redmine
 cryptography==42.0.8
@@ -28,7 +33,6 @@ psutil
 # numpy
 # pandas
 
-
 pyncclient
 cryptography
 xmltodict
@@ -38,3 +42,5 @@ matplotlib
 pandas
 
 redis
+
+#starlette<0.39.0,>=0.37.2
