@@ -13,6 +13,8 @@
 <div>
 
     <div class="container">
+
+        <form id="myForm">
         <div class="input-group input-group-sm mb-3">
         
             <!-- <input type="text" id="daterange" name="daterange" value="{{ date_range }}" /> -->
@@ -33,8 +35,16 @@
     
             <div class="input-group-prepend"><span class="input-group-text">Items to Skip M=</span></div>
             <input type="number" class="form-control" id="skipItems" value="0">
-            <button onclick="refresh()" class="btn btn-primary" type="button">Reload</button>
+            <div class="input-group-append">
+                <span class="input-group-text">Oldest First?</span>
+                <div class="input-group-text">
+                    <input type="checkbox" id="ascending" aria-label="Checkbox For Table Order">
+              </div>
+            </div>
+              
+            <button onclick="refresh()" class="btn btn-primary" type="button">Reload Table Data</button>
         </div>  
+        </form>
     </div>
 
     <hr>
@@ -74,7 +84,20 @@
 <script type="text/javascript">
 
 
+document.getElementById("myForm").addEventListener("keypress", function(event) {
+  if (event.key === "Enter") {
 
+    event.preventDefault();
+    
+    console.log("nItems", document.getElementById("nItems").value);
+    console.log("skipItems", document.getElementById("skipItems").value);
+    console.log("start_date", getUTCDate('start'));
+    console.log("end_date", getUTCDate('end'));
+    console.log("ascending", document.getElementById("ascending").checked);
+
+    refresh();
+  }
+});
 
 // Dynamic Width (Build Regex)
 function wrap(s, w) {
@@ -157,35 +180,6 @@ $('.datepicker-end').on('change', function(event) {
     updateUrl();
 });
 
-function updateUrl() {
-    const end_date = getUTCDate('end');
-    const start_date = getUTCDate('start');
-    const n = document.getElementById('nItems').value;
-    const skip = document.getElementById('skipItems').value;
-    
-    const urlParams = new URLSearchParams();
-    urlParams.append('n_max', n);
-    urlParams.append('skipn', skip);
-    if (end_date) {
-        urlParams.append('end_date', end_date);
-    }
-    
-
-    const url = `/qry/tabledata?${urlParams.toString()}`;
-
-    document.getElementById('qry-url').setAttribute('href', url);
-    document.getElementById('qry-url').innerText = url;
-    console.log(url);
-    return url;
-}
-
-
-var searchParams = new URLSearchParams(window.location.search);
-document.getElementById('nItems').value = searchParams.get("n") ? searchParams.get("n") : 50;
-document.getElementById('skipItems').value = searchParams.get("skipItems") ? searchParams.get("skipItems") : 0;
-setUTCDate(searchParams.get("end_date") ? searchParams.get("end_date") : '', 'end');
-setUTCDate(searchParams.get("start_date") ? searchParams.get("start_date") : '', 'start');
-
 // $('#sandbox-container .input-daterange').datepicker({
 // });
 
@@ -202,12 +196,67 @@ $( "#datepicker" ).change(function() {
     updateUrl();
 });
 
+$( "#skipItems" ).change(function() {
+    updateUrl();
+});
+
+$( "#ascending" ).change(function() {
+    updateUrl();
+});
+
+function updateUrl() {
+    const end_date = getUTCDate('end');
+    const start_date = getUTCDate('start');
+    const n = document.getElementById('nItems').value;
+    const skip = document.getElementById('skipItems').value;
+    const checkbox = document.getElementById("ascending");
+    
+
+    const urlParams = new URLSearchParams();
+    urlParams.append('n_max', n);
+    urlParams.append('skipn', skip);
+    urlParams.append('ascending', checkbox.checked ? 1:0);
+    if (end_date) {
+        urlParams.append('end_date', end_date);
+    }
+    if (start_date) {
+        urlParams.append('start_date', start_date);
+    }
+
+    const url = `/qry/tabledata?${urlParams.toString()}`;
+
+    document.getElementById('qry-url').setAttribute('href', url);
+    document.getElementById('qry-url').innerText = url;
+    console.log(url);
+    
+    setAlert(`Params updated... Please press reload...`, 'warning');
+
+    return url;
+}
+
+
+var searchParams = new URLSearchParams(window.location.search);
+
+document.getElementById('nItems').value = searchParams.get("n") ? searchParams.get("n") : 200;
+document.getElementById('skipItems').value = searchParams.get("skipn") ? searchParams.get("skipn") : 0;
+setUTCDate(searchParams.get("end_date") ? searchParams.get("end_date") : '', 'end_date');
+setUTCDate(searchParams.get("start_date") ? searchParams.get("start_date") : '', 'end_date');
+
+if (searchParams.has("ascending") && searchParams.get("ascending") === "1") {
+    document.getElementById('ascending').checked = true;
+} else {
+    document.getElementById('ascending').checked = false;
+}
+
+
 function refresh() {
     var searchParams = new URLSearchParams(window.location.search);
 
-    searchParams.set("n_max", document.getElementById("nItems").value);
+    searchParams.set("n", document.getElementById("nItems").value);
     searchParams.set("skipn", document.getElementById("skipItems").value);
-    searchParams.set("end_date", getUTCDate());
+    searchParams.set("start_date", getUTCDate('start'));
+    searchParams.set("end_date", getUTCDate('end'));
+    searchParams.set("ascending", document.getElementById("ascending").checked ? 1:0);
     window.location.search = searchParams.toString();
 }
 
@@ -246,7 +295,7 @@ function loadata() {
         const url = updateUrl();
         
         
-
+        console.log('querying', url);
         fetch(url)
         .then(function(response) {
             return response.json();
@@ -435,7 +484,7 @@ function loadata() {
             const nR = obj['data'].length;
             document.getElementById('query-text').innerText = `QUERY="${wrapText(obj['queries'], 150)}"`
             
-            setAlert(`SUCCESS RESULT: N=${nR} scripts`)
+            setAlert(`SUCCESS RESULT: N=${nR} scripts`);
             
         })
     } catch (error) {

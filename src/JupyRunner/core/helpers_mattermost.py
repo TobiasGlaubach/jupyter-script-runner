@@ -150,9 +150,9 @@ async def handle_webhook_request(data, feedback_requests, _user_feedback_reply) 
             table_header = "| ID | Script Out Path | Status | Comments |\n| --- | --- | --- | --- |\n"
             table_rows = ""
             for script in scripts:
+                comments = helpers.limit_len(script.comments, 50).replace('\n', ' ')
                 script_out_path_link = f"[{os.path.basename(script.script_out_path)}]({dbserver_uri}/show/{script.script_out_path})"
-                table_rows += f"| {script.id} | {script_out_path_link} | {script.status} | {helpers.limit_len(script.comments, 50)} |\n"
-            
+                table_rows += f"| {script.id} | {script_out_path_link} | {script.status} | {comments} |\n"
             text = f'## Last {N=} Scripts\n\n' + table_header + table_rows
 
         elif data.get('trigger_word') == '#set' or data.get('trigger_word') == '#edit' or data.get('trigger_word') == '#update':

@@ -726,9 +726,9 @@ async def qry_scripts(start_date:datetime.datetime|None=Query(default=None),
                 script_in_path:str=Query(default=''),
                 script_version:str=Query(default=''),
                 out_path:str=Query(default=''),
-                n_max:int=Query(default=-1), skipn:int=Query(default=0)):
+                n_max:int=Query(default=-1), skipn:int=Query(default=0), ascending:int=Query(default=0)):
     dc = dbi.qry_tabledata(t_min=start_date, t_max=end_date, stati=stati, script_name=script_name, script_in_path=script_in_path, script_version=script_version, 
-                             out_path=out_path, n_max=n_max, skipn=skipn)
+                             out_path=out_path, n_max=n_max, skipn=skipn, ascending=ascending)
     return dc
 
 @app.get("/qry/script")
@@ -1182,7 +1182,8 @@ def _add_comments(comment_data, tp, id_):
                 raise HTTPException(status_code=404, detail=f"Script {id_=} not found in db")
 
             if 'text' in comment_data:
-                obj.comments += '\n'
+                if obj.comments and not obj.comments.endswith('\n'):
+                    obj.comments += '\n'
                 obj.comments = str(obj.comments) + f'  [{helpers.now_iso()}] | {comment_data["text"]}'
                 session.commit()
                 dbi.publish_update(obj)

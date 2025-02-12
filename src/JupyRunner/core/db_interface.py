@@ -211,10 +211,11 @@ def qry_scripts(t_min:datetime.datetime|None=None,
                 script_version:str='',
                 out_path:str='',
                 n_max:int=-1, skipn:int=0, 
-                ret_query = False
+                ret_query = False,
+                ascending = True,
                 ):
     with Session(engine) as session:
-        return qry_scripts_sub(session, t_min, t_max, stati, script_name, script_in_path, script_version, out_path, n_max, skipn, ret_query)
+        return qry_scripts_sub(session, t_min, t_max, stati, script_name, script_in_path, script_version, out_path, n_max, skipn, ret_query, ascending)
     
 def qry_scripts_sub(session, t_min:datetime.datetime|None=None, 
                 t_max:datetime.datetime|None=None, 
@@ -223,11 +224,17 @@ def qry_scripts_sub(session, t_min:datetime.datetime|None=None,
                 script_in_path:str='',
                 script_version:str='',
                 out_path:str='',
-                n_max:int=-1, skipn:int=0, 
-                ret_query = False):
+                n_max:int=-1, 
+                skipn:int=0, 
+                ret_query = False,
+                ascending=True):
 
     s = schema.Script
-    q = select(s).order_by(s.start_condition.asc())
+    if ascending:
+        q = select(s).order_by(s.start_condition.asc())
+    else:
+        q = select(s).order_by(s.start_condition.desc())
+
     if t_min:
         q = q.where(s.start_condition >= t_min)
     if t_max:
@@ -269,41 +276,45 @@ def get_ids(data_type:type, n_max:int=-1, reqt_q = False):
             return res
     
 def qry_tabledata(t_min, t_max, skipn, n_max, **kwargs):
-    with Session(engine) as session:
-        scripts, q = qry_scripts(n_max=n_max, skipn=skipn, t_min=t_min, t_max=t_max, ret_query=True, **kwargs)
 
-        # df = pd.DataFrame.from_records(data)
-        # columns=df.columns.tolist()
-        log.debug(len(scripts))
-        rows = [{**script.model_dump(), **{'files': len(script.datafiles)}} for script in scripts if script]
-        log.debug(rows)
+    scripts, q = qry_scripts(n_max=n_max, skipn=skipn, t_min=t_min, t_max=t_max, ret_query=True, **kwargs)
 
-        for row in rows:
+    # df = pd.DataFrame.from_records(data)
+    # columns=df.columns.tolist()
+    log.debug(len(scripts))
+    rows = [{**script.model_dump(), **{'files': len(script.datafiles)}} for script in scripts if script]
+    log.debug(rows)
 
-            if not row['files']:
-                row['files'] = "NO files"
-            else:
-                row['files'] = str(row['files']) + "  files"
+    for row in rows:
 
-
-            row['docs'] = row['docs_json']
+        if not row['files']:
+            row['files'] = "NO files"
+        else:
+            row['files'] = str(row['files']) + "  files"
 
 
-            for k in row.keys():
-                if isinstance(row[k], datetime.datetime):
-                    row[k] = helpers.make_zulustr(row[k])
+        row['docs'] = row['docs_json']
 
-                if ('condition' in k or 'time' in k) and row[k] and isinstance(row[k], str):
-                    row[k] = row[k].replace('T', ' ')
-                    row[k] = row[k].split('.')[0]
 
-                elif ('script_params_json' in k or '_json' in k) and row[k] and not isinstance(row[k], str):
-                    row[k] = json.dumps(row[k], ensure_ascii=False, default=schema.json_serial)
-                elif row[k] is None:
-                    row[k] = ''
+        for k in row.keys():
+            if isinstance(row[k], datetime.datetime):
+                row[k] = helpers.make_zulustr(row[k])
 
-        columns = 'id device_id script_params_json status script_out_path files docs start_condition end_condition comments time_finished script_name script_version errors script_in_path'.split()
-        rows = [[row.get(c, None) for c in columns] for row in rows]
+            if ('condition' in k or 'time' in k) and row[k] and isinstance(row[k], str):
+                row[k] = row[k].replace('T', ' ')
+                row[k] = row[k].split('.')[0]
 
-        inp = dict(n=n_max, skip=skipn, start_date=t_min, end_date=t_max)
-        return dict(input=inp, queries=str(q), columns=columns, data=list(reversed(rows)))
+            elif ('script_params_json' in k or '_json' in k) and row[k] and not isinstance(row[k], str):
+                row[k] = json.dumps(row[k], ensure_ascii=False, default=schema.json_serial)
+            elif row[k] is None:
+                row[k] = ''
+
+    columns = 'id device_id script_params_json status script_out_path files docs start_condition end_condition comments time_finished script_name script_version errors script_in_path'.split()
+    rows = [[row.get(c, None) for c in columns] for row in rows]
+
+    inp = dict(n=n_max, skip=skipn, start_date=t_min, end_date=t_max)
+    if kwargs.get('ascending'):
+        data = list(reversed(rows))
+    else:
+        data = rows
+    return dict(input=inp, queries=str(q), columns=columns, data=data)
