@@ -1,4 +1,6 @@
+import datetime
 import hashlib
+import io
 import os, time, json
 
 from JupyRunner.core import filesys_storage_api, schema, helpers
@@ -55,5 +57,19 @@ class RedmineAccessor(object):
         datafile.data_json.update({'meta': api.get_meta()})
         return datafile 
 
-    def destruct(self):
-        pass
+def upload_file2wiki(page_title, project_id, file_path):
+    global redmine
+    filename = os.path.basename(file_path)
+    page = redmine.wiki_page.get(page_title, project_id=project_id, include=['attachments'])
+    to_upload = [{"path" : file_path, "filename" : filename, "content_type" : "application/octet-stream"}]
+    page.uploads = to_upload
+    page.comments = f'updated at {datetime.datetime.utcnow().isoformat()}'
+    page.save()
+
+def upload_bytes2wiki(page_title, project_id, bytes_object, filename):
+    global redmine
+    page = redmine.wiki_page.get(page_title, project_id=project_id, include=['attachments'])
+    to_upload = [{"path": io.BytesIO(bytes_object), "filename": filename, "content_type": "application/octet-stream"}]
+    page.uploads = to_upload
+    page.comments = f'updated at {datetime.datetime.utcnow().isoformat()}'
+    page.save()

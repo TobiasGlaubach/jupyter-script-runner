@@ -5,6 +5,7 @@ import datetime
 import hashlib
 import io
 import json
+import mimetypes
 import os
 from typing import Generator
 
@@ -32,7 +33,7 @@ from jinja2 import Environment, FileSystemLoader
 from JupyRunner.core import db_interface as dbi
 from JupyRunner.core import helpers_userfeedback as usr
 
-from JupyRunner.core import schema, helpers, filesys_storage_api, helpers_mattermost, helpers_papermill, scriptrunner, redis_interface
+from JupyRunner.core import schema, helpers, filesys_storage_api, helpers_mattermost, helpers_papermill, scriptrunner, redis_interface, latex_maker_api
 from JupyRunner.io import nextcloud_api, redmine_api, local_filesys_api
 import JupyRunner
 
@@ -69,7 +70,7 @@ for module in modules:
 
 
 redmine_api.setup(config['wiki_uploader'])
-
+latex_maker_api.setup()
 
 rapi = None
 
@@ -1283,15 +1284,11 @@ async def repo_get_params(script_name : str = Query(default='', description='The
 
 
 
-
-
 @app.get("/show/{path:path}")
 async def send_report(path: str, request: Request):
     log.debug(f'"/show" with{path=}' )
     if path.startswith("home/"):
         path = "/" + path
-
-
 
     if path and path.endswith('.ipynb'):
         n = len('.ipynb')
@@ -1315,12 +1312,12 @@ async def send_report(path: str, request: Request):
                     html_data, resources = html_exporter.from_filename(path)
                     with open(npath, "w", encoding='utf-8') as f:
                         f.write(html_data)
-                
                 path = npath
 
     elif not os.path.exists(path) and os.path.exists(npath):
         path = npath
     else:
+        log.error(f'Requested File not found: {path=}')
         raise HTTPException(status_code=404, detail="File not found")
 
     return FileResponse(path)
@@ -1438,22 +1435,82 @@ def doc_example(html:int = Query(default=0, description='anything but 0 and this
     else:
         return doc.dump()
 
+
 class UploadDocSchema(BaseModel):
     doc_name: str = ''
     doc: list[dict]
     force_overwrite:bool = False
     page_title:str = ''
+    make_pdf:bool = True
+    pdf_template_id:str = ''
+    pdf_template_params: dict|None = None
+    pdf_ignore_error:bool = True
+    pdf_attachments_b64_dict: dict|None = None
+    pdf_latex_compiler:str = 'pdflatex'
+    pdf_ignore_error:bool = True
 
 
-def handle_new_doc(doc:pyd.DocBuilder, doc_name, dir_rep, page_title, force_overwrite):
-
+def handle_new_doc(r:UploadDocSchema, script:schema.Script=None, dir_rep=None):
     if not os.path.exists(dir_rep):
         filesys_storage_api.mkdir(dir_rep)
+    doc = r.doc
+    if isinstance(doc, list):
+        doc = pyd.Doc(doc)
 
-    dc_local = doc.export_all(dir_path=dir_rep, report_name=doc_name)
+    doc_name = r.doc_name
+    if not doc_name:
+        if r.make_pdf and r.pdf_template_params:
+            doc_name = 'auto'
+        elif script:
+            device_id = script.device_id if script.device_id else 'no_device'
+            doc_name = filesys_storage_api.get_default_doc_name(script.id, device_id)
+        else:
+            doc_name = filesys_storage_api.get_default_doc_name('0', 'no_device')
     
-    localpath = next((k for k in dc_local if k.endswith('html')), None)
-    local_url = f'{dbserver_uri}/show/{urllib.parse.quote(localpath)}'
+    file_name_pdf = ''
+    dc_local = {}
+    pdf_bytes = None
+    if r.make_pdf:
+        try:
+            template_id = r.pdf_template_id
+            if not template_id:
+                template_id = os.environ.get('LATEXMAKE_TEMPLATE', '')
+            
+            dc, pdf_bytes = latex_maker_api.compile_report(doc, 
+                                template_id, 
+                                r.pdf_template_params, 
+                                docname=doc_name,
+                                attachments_dc=r.pdf_attachments_b64_dict,
+                                raise_for_unknown_params=False,
+                                latex_compiler=r.pdf_latex_compiler,
+                                ignore_error=r.pdf_ignore_error,
+                                )
+        except Exception as err:
+            log.error(f'Error while exporting PDF {type(err)=} {err=}')
+
+        
+        if doc_name == 'auto':
+            doc_name = dc.get('file_name', '')[:-4]
+                
+        if pdf_bytes:
+            file_name_pdf = os.path.join(dir_rep, doc_name + '.pdf')
+            
+        
+            with open(file_name_pdf, 'wb') as fp:
+                fp.write(pdf_bytes)
+
+            dc_local[file_name_pdf] = os.path.exists(file_name_pdf)
+
+    tmp = doc.export_all(dir_path=dir_rep, report_name=doc_name)
+    dc_local.update(tmp)
+
+    log.info(dc_local)
+
+    localpath = next((k for k in dc_local if k.endswith('pdf')), None)
+    if localpath is None:
+        localpath = next((k for k in dc_local if k.endswith('html')), None)
+
+    local_url = f'{helpers.get_db_url()}/show/{urllib.parse.quote(localpath)}'
 
     rmconfig = config.get('wiki_uploader', {}).get('redmine', {})
     project_id = rmconfig.get('project_id')
@@ -1462,10 +1519,13 @@ def handle_new_doc(doc:pyd.DocBuilder, doc_name, dir_rep, page_title, force_over
         upload_url = doc.to_redmine_upload(redmine=redmine_api.redmine, 
                                 project_id=project_id,
                                 report_name=doc_name,
-                                page_title=page_title,
-                                force_overwrite=force_overwrite,
-                                verb=True
-                                )
+                                page_title=r.page_title,
+                                force_overwrite=r.force_overwrite,
+                                verb=True)
+        
+        if file_name_pdf and os.path.exists(file_name_pdf):
+            redmine_api.upload_bytes2wiki(r.page_title, project_id, pdf_bytes, os.path.basename(file_name_pdf))
+
         upload_info = 'success see result link for the report '
         uploaded = True
     else:
@@ -1482,22 +1542,37 @@ def handle_new_doc(doc:pyd.DocBuilder, doc_name, dir_rep, page_title, force_over
         'saved_remotely': uploaded,
         'local_url': local_url,
         'upload_url': upload_url
-    }
+    }, doc_name
 
 
 @app.post("/doc/upload")
 async def doc_upload(r: UploadDocSchema) -> Dict[str, Any]:
     try:
-        docreq = r.model_dump() # await r.json()
-        assert docreq, 'doc can not be empty!'
-        assert docreq.get('doc', [])
-        doc_name = docreq.get('doc_name', '')
-        doc = pyd.DocBuilder(docreq.get('doc', []))
-        if not doc_name:
-            doc_name = filesys_storage_api.get_default_doc_name('0', 'no_device')
+        assert not r is None, 'doc can not be empty!'
+        assert r.doc, 'doc can not be empty!'
+        res = handle_new_doc(r, None, dir_rep=filesys_storage_api.default_dir_docs)
+        res['ok'] = True
+        return res
+    
+    except Exception as err:
+        log.exception(err)
+        raise
 
-        dir_rep = filesys_storage_api.default_dir_docs
-        res = handle_new_doc(doc, doc_name, dir_rep, docreq.get('page_title', ''), docreq.get('force_overwrite', ''))
+
+@app.get("/doc/upload_example")
+async def doc_upload() -> Dict[str, Any]:
+    try:
+        
+        r = UploadDocSchema('my_test_document', 
+                            doc=pyd.get_example().dump(), 
+                            force_overwrite=True, 
+                            page_title=filesys_storage_api.get_default_doc_name(0, 'no_device'),
+                            make_pdf=True
+                            )
+        
+        assert not r is None, 'doc can not be empty!'
+        assert r.doc, 'doc can not be empty!'
+        res = handle_new_doc(r, None, dir_rep=filesys_storage_api.default_dir_docs)
         res['ok'] = True
         return res
     
@@ -1507,28 +1582,16 @@ async def doc_upload(r: UploadDocSchema) -> Dict[str, Any]:
 
 
 
+
 @app.post("/action/script/{script_id}/upload/doc")
 async def upload_doc_for_script(script_id: int, r: UploadDocSchema) -> Dict[str, Any]:
     try:
-        docreq = r.model_dump() # await r.json()
-        assert docreq, 'doc can not be empty!'
-        assert docreq.get('doc', [])
-        doc_name = docreq.get('doc_name', '')
-        doc = pyd.DocBuilder(docreq.get('doc', []))
-
         with dbi.se() as session:
             script = session.get(schema.Script, script_id)
             if not script:
                 raise HTTPException(status_code=404, detail="Script not found")
             
-            
-            if not doc_name:
-                device_id = script.device_id if script.device_id else 'no_device'
-                doc_name = filesys_storage_api.get_default_doc_name(script_id, device_id)
-
-            dir_rep = script.get_reports_dir()
-
-            res = handle_new_doc(doc, doc_name, dir_rep, docreq.get('page_title', ''), docreq.get('force_overwrite', ''))
+            res, doc_name = handle_new_doc(r, script, script.get_reports_dir())
             docs_json = script.docs_json
 
             docs_json[f'local/{doc_name}'] = res.get('local_url', '')
@@ -1545,6 +1608,7 @@ async def upload_doc_for_script(script_id: int, r: UploadDocSchema) -> Dict[str,
     except Exception as err:
         log.exception(err)
         raise
+
 
 
 """

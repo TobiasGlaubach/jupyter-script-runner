@@ -1,7 +1,7 @@
 FROM python:3.11-slim-buster
 
 USER root
-RUN apt-get update && apt-get install unzip pandoc -y
+RUN apt-get update && apt-get install unzip pandoc texlive-latex-extra -y
 
 RUN useradd -r --gid=100 --uid=1000 --create-home --shell /bin/bash jovyan
 
